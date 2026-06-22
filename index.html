@@ -416,46 +416,42 @@ body.mode-pc .mTitleImg{max-width:min(540px,55vw);max-height:28vh;margin-top:cla
   display:flex;align-items:center;gap:8px;
 }
 .skins-section-title.char-title{font-size:7px;color:#00c853;border-bottom-color:rgba(0,200,80,.15);margin-top:16px;}
-.ball-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
+/* (las definiciones de .ball-card / .char-skin-grid se consolidan más abajo) */
+/* ── SKINS: BALL CARDS (sistema unificado) ── */
+.ball-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));
+  gap:12px;margin-bottom:6px;
+}
 .ball-card{
-  width:86px;border:2px solid #222;border-radius:10px;padding:10px 6px 8px;
-  text-align:center;background:rgba(0,0,0,.5);cursor:pointer;
-  transition:all .15s;position:relative;overflow:hidden;
+  border:2px solid #1a1a2a;border-radius:14px;
+  text-align:center;background:linear-gradient(160deg,#0d0d1c,#06060e);
+  cursor:pointer;transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease;
+  position:relative;overflow:hidden;padding-bottom:10px;
+  box-shadow:0 2px 8px rgba(0,0,0,.35);
 }
-.ball-card:hover{transform:translateY(-2px);}
-.char-skin-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
-.char-skin-card{
-  width:72px;border:2px solid #333;border-radius:8px;
-  text-align:center;background:#0a0a18;cursor:pointer;
-  overflow:hidden;transition:all .15s;
-}
-.char-skin-card:hover{transform:translateY(-2px);border-color:#00c85388;box-shadow:0 4px 14px rgba(0,200,80,.2);}
-.char-skin-card.equipped-skin{border-color:#00c853;box-shadow:0 0 12px #00c85366;}
-/* ── SKINS: BALL CARDS ── */
-.ball-card{
-  width:96px;border:2px solid #1a1a2a;border-radius:12px;
-  text-align:center;background:linear-gradient(160deg,#0a0a18,#060610);
-  cursor:pointer;transition:all .18s;position:relative;overflow:hidden;
-  padding-bottom:9px;
-}
-.ball-card:hover{transform:translateY(-3px);}
-.ball-card.equipped{border-color:var(--ball-col,#ff5500);box-shadow:0 0 18px color-mix(in srgb,var(--ball-col,#ff5500) 45%,transparent);}
+.ball-card:hover{transform:translateY(-4px);border-color:#333355;box-shadow:0 8px 20px rgba(0,0,0,.45);}
+.ball-card.equipped{border-color:var(--ball-col,#ff5500);box-shadow:0 0 20px color-mix(in srgb,var(--ball-col,#ff5500) 50%,transparent);}
 .ball-card-img{
-  width:100%;height:76px;object-fit:contain;display:block;
-  padding:10px 10px 4px;box-sizing:border-box;
+  width:100%;height:84px;object-fit:contain;display:block;
+  padding:12px 12px 6px;box-sizing:border-box;
   transition:transform .18s;
-  filter:drop-shadow(0 2px 10px var(--ball-col,#ff5500));
+  filter:drop-shadow(0 3px 12px var(--ball-col,#ff5500));
 }
-.ball-card:hover .ball-card-img{transform:scale(1.1);}
-.ball-card.locked .ball-card-img{filter:brightness(.28) grayscale(.8);}
-.ball-card-name{font-size:5px;font-family:'Press Start 2P',monospace;padding:0 4px 4px;line-height:1.6;}
-.ball-card-status{font-size:5px;font-family:'Press Start 2P',monospace;padding:3px 8px;border-radius:4px;display:inline-block;}
-.ball-card-status.owned{color:#666;}
-.ball-card-status.active{color:#00ff88;background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.25);}
-.ball-card-status.price{color:var(--Y);background:rgba(255,220,0,.07);border:1px solid rgba(255,220,0,.18);}
-.ball-card-lock{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;pointer-events:none;}
-.img-fallback{display:none;align-items:center;justify-content:center;width:100%;height:76px;font-size:30px;background:rgba(0,0,0,.25);}
+.ball-card:hover .ball-card-img{transform:scale(1.08);}
+.ball-card.locked .ball-card-img{filter:brightness(.3) grayscale(.85);}
+.ball-card-name{font-size:5.5px;font-family:'Press Start 2P',monospace;padding:2px 6px 6px;line-height:1.7;letter-spacing:.3px;}
+.ball-card-status{font-size:5px;font-family:'Press Start 2P',monospace;padding:4px 9px;border-radius:5px;display:inline-block;}
+.ball-card-status.owned{color:#667;background:rgba(255,255,255,.04);}
+.ball-card-status.active{color:#00ff88;background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);}
+.ball-card-status.price{color:var(--Y);background:rgba(255,220,0,.08);border:1px solid rgba(255,220,0,.22);}
+.ball-card-lock{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;pointer-events:none;background:rgba(0,0,0,.15);}
+.img-fallback{display:none;align-items:center;justify-content:center;width:100%;height:84px;font-size:32px;background:rgba(255,255,255,.02);}
 .char-skin-fallback{display:none;align-items:center;justify-content:center;width:100%;aspect-ratio:1;font-size:24px;background:#0a0a18;}
+/* ── SKINS: CHAR CARDS (mismo sistema, mismo grid) ── */
+.char-skin-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));
+  gap:12px;margin-bottom:8px;
+}
 /* ── SKINS: CHAR CARDS ── */
 .char-skin-grid{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px;}
 .char-skin-card{
@@ -1097,7 +1093,7 @@ body.mode-pc #sModes > *{
       </div>
     </div>
 
-    <!-- MI ROSTER (card) -->
+    <!-- MI COLLECTION (card) -->
     <div class="modeCard" id="rosterModeCard" onclick="show('sRoster');buildRoster()" style="border-color:#aa44dd;">
       <div class="modeCornerTL" style="border-color:#aa44dd;"></div><div class="modeCornerTR" style="border-color:#aa44dd;"></div>
       <div class="modeIconWrap" style="color:#aa44dd;">
@@ -1111,8 +1107,8 @@ body.mode-pc #sModes > *{
         </svg>
       </div>
       <div class="modeCardBody">
-        <div class="modeName" style="color:#aa44dd;">MY ROSTER</div>
-        <div class="modeDesc" id="rosterModeDesc">Manage your team. View stats, equip skins.</div>
+        <div class="modeName" style="color:#aa44dd;">COLLECTION</div>
+        <div class="modeDesc" id="rosterModeDesc">Personajes y balones. Estadísticas y skins.</div>
       </div>
     </div>
 
@@ -1158,14 +1154,30 @@ body.mode-pc #sModes > *{
   </div>
 </div>
 
-<!-- ROSTER -->
-<div id="sRoster" class="scr" style="background:radial-gradient(ellipse at 50% 0%,#0a0020,var(--BG) 70%);overflow-y:auto;padding:14px;gap:0;justify-content:flex-start;align-items:center;">
-  <div style="width:100%;max-width:860px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-shrink:0;">
-    <div style="font-size:12px;color:var(--PU);text-shadow:0 0 12px var(--PU);">👥 MI ROSTER</div>
-    <div style="font-size:8px;color:var(--Y);" id="rosterCoins">🪙 0</div>
-    <button class="mBtn b" style="width:auto;padding:7px 13px;font-size:7px;min-width:0;" onclick="show('sMenu')">← MENÚ</button>
+<!-- COLLECTION -->
+<div id="sRoster" class="scr" style="background:radial-gradient(ellipse at 50% 0%,#0a0020,var(--BG) 70%);overflow-y:auto;padding:0;gap:0;justify-content:flex-start;align-items:center;">
+  <div class="shop-sticky-top" style="background:#0a0020;">
+    <div class="shop-header" style="border-bottom-color:rgba(170,68,221,.18);">
+      <div>
+        <div style="font-size:12px;color:var(--PU);text-shadow:0 0 12px var(--PU);letter-spacing:2px;">COLLECTION</div>
+        <div style="font-size:6px;color:#5a3a7a;letter-spacing:1px;margin-top:2px;">Personajes · Balones</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="font-size:8px;color:var(--Y);" id="rosterCoins">🪙 0</div>
+        <button class="mBtn b" style="width:auto;padding:6px 11px;font-size:7px;min-width:0;" onclick="show('sMenu')">← MENÚ</button>
+      </div>
+    </div>
+    <div class="shop-tabs" style="width:100%;display:flex;justify-content:center;">
+      <div style="display:flex;width:100%;max-width:860px;">
+        <button class="shop-tab active" id="collTabChars" onclick="switchCollTab('chars')" style="border-bottom-color:var(--PU);">🧍 PERSONAJES</button>
+        <button class="shop-tab" id="collTabBalls" onclick="switchCollTab('balls')">⚪ BALONES</button>
+      </div>
+    </div>
   </div>
-  <div id="rosterContent" style="width:100%;max-width:860px;"></div>
+  <div style="width:100%;max-width:860px;padding:14px;">
+    <div id="collPanelChars" class="shop-panel active"><div id="rosterContent" style="width:100%;"></div></div>
+    <div id="collPanelBalls" class="shop-panel"><div id="collBallsContent" style="width:100%;"></div></div>
+  </div>
 </div>
 
 <!-- TEAM SELECT -->
@@ -1175,7 +1187,7 @@ body.mode-pc #sModes > *{
   <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px 6px;background:linear-gradient(180deg,#12002a,transparent);flex-shrink:0;">
     <button class="mBtn b" style="width:auto;padding:5px 10px;font-size:6px;min-width:0;" onclick="show('sModes')">← MODOS</button>
     <div id="charScreenTitle" style="font-size:10px;color:#7c4dff;text-shadow:0 0 14px #7c4dff;letter-spacing:2px;" data-i18n="chooseTeam">CHOOSE YOUR TEAM</div>
-    <button class="mBtn b" style="width:auto;padding:5px 10px;font-size:6px;min-width:0;" onclick="show('sRoster')">👥 ROSTER</button>
+    <button class="mBtn b" style="width:auto;padding:5px 10px;font-size:6px;min-width:0;" onclick="show('sRoster')">COLLECTION</button>
   </div>
 
   <!-- MAIN PANEL -->
@@ -1671,6 +1683,37 @@ function switchShopTab(tab){
   document.getElementById('shopPanelUpg').classList.toggle('active', tab==='upg');
   document.getElementById('shopPanelSkins').classList.toggle('active', tab==='skins');
   if(tab==='skins') buildCustomize();
+}
+function switchCollTab(tab){
+  document.getElementById('collTabChars').classList.toggle('active', tab==='chars');
+  document.getElementById('collTabBalls').classList.toggle('active', tab==='balls');
+  document.getElementById('collPanelChars').classList.toggle('active', tab==='chars');
+  document.getElementById('collPanelBalls').classList.toggle('active', tab==='balls');
+  if(tab==='balls') buildCollectionBalls();
+}
+function buildCollectionBalls(){
+  const cont=$$('collBallsContent');if(!cont)return;cont.innerHTML='';
+  const grid=document.createElement('div');grid.className='ball-grid';
+  BALL_SKINS.forEach(b=>{
+    const active=selectedBallSkin===b.id;
+    const card=document.createElement('div');
+    card.className='ball-card'+(active?' equipped':'')+(b.unlocked?'':' locked');
+    card.style.setProperty('--ball-col',b.col);
+    card.style.borderColor=active?b.col:'#1a1a2a';
+    let statusHtml='';
+    if(!b.unlocked) statusHtml=b.eventOnly?`<div class="ball-card-status price" style="background:linear-gradient(90deg,#ffe600,#ff8800);color:#000;">EVENTO</div>`:`<div class="ball-card-status price">🪙 ${b.cost}</div>`;
+    else if(active)  statusHtml=`<div class="ball-card-status active">✓ EQUIPADO</div>`;
+    else             statusHtml=`<div class="ball-card-status owned">EQUIPAR</div>`;
+    card.innerHTML=`
+      <img class="ball-card-img" src="${b.imgUrl||''}" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex';" alt="">
+      <div class="img-fallback">${b.emoji||'⚪'}</div>
+      ${!b.unlocked?`<div class="ball-card-lock"><span style="font-size:20px;">🔒</span></div>`:''}
+      <div class="ball-card-name" style="color:${b.col};">${b.name}</div>
+      ${statusHtml}`;
+    card.onclick=()=>{(b.unlocked?equipBall(b.id):unlockBall(b.id));buildCollectionBalls();};
+    grid.appendChild(card);
+  });
+  cont.appendChild(grid);
 }
 function refreshUI(){
   const c=sv.coins,t=sv.tickets;
@@ -3112,13 +3155,10 @@ function startBattle(){
   ball={x:200,y:205,vx:0,vy:0,owner:teamJ[0],inFlight:false,dest:null,src:null,isPase:false,isWall:false,charge:0,frame:0,totalFrames:0,type:'normal',wobble:0,onGround:false,_free:false,_bounces:0};
   leaderBuffActive={};applyLeaderBuff();updHUD();msg('');$$('pwupDisplay').textContent='';
   if(isVersus()&&versusSimultaneous){
-    // Simultaneous mode: single ball, both players can act when they have possession
+    // Tiempo real: ambos jugadores pueden actuar cuando tengan posesión del balón
     chargingJ2=false;chargeLevelJ2=0;j1KeyChargeLevel=0;j2KeyChargeLevel=0;j1KeyCharging=false;j2KeyCharging=false;
-    turnJ=true; // tracks who has the ball (l=J1, r=J2)
+    turnJ=true; // refleja quién tiene el balón (l=J1, r=J2) — no restringe acciones
     setTurnSimultaneous();
-  }else if(isVersus()){
-    // Show J1 start overlay (turn-based legacy)
-    setTimeout(()=>showPassOverlay('👤 JUGADOR 1 EMPIEZA','#00d4ff','¡Pasa el dispositivo al Jugador 1!',()=>setTurn(true)),300);
   }else{setTurn(true);}
   if(leaderBuffActive.key==='cj'){teamE.filter(j=>j.alive).forEach(j=>j.frozen=1);spawnFloat('CONGELADOS!',W/2,60,'#aaddff');}
   setTimeout(spawnFloorPowerup,4000);
@@ -3188,7 +3228,7 @@ function versusPassTurn(toJ,callback){
   const col=toJ?'#00d4ff':'#ff2277';
   showPassOverlay((toJ?'TURNO J1':'TURNO J2'),col,'Tapa la pantalla y pasa el dispositivo',callback);
 }
-function updRageBtn(){const can=rageJ>=100&&turnJ&&!ball.inFlight;const rd=$$('rageBig');if(rd)rd.style.display=can?'block':'none';}
+function updRageBtn(){const can=rageJ>=100&&!ball.inFlight;const rd=$$('rageBig');if(rd)rd.style.display=can?'block':'none';}
 function activeJ(){return teamJ.find(j=>j.alive)||null;}
 function activeE(){return teamE.find(j=>j.alive)||null;}
 function addRage(side,amt){
@@ -3360,8 +3400,8 @@ function onPointerMove(e){
   }
   const {x,y}=cvCoords(e);
   if(isDragging&&dragFighter){
-    // J1 drags left half, J2 drags right half in versus
-    const isJ2drag=isVersus()&&!turnJ;
+    // Clamp por el LADO real de la ficha (no por turno — el movimiento es siempre libre)
+    const isJ2drag=isVersus()&&dragFighter.side==='r';
     const minX=isJ2drag?W/2+10:20, maxX=isJ2drag?W-dragFighter.w-20:W/2-dragFighter.w-10;
     const nx=Math.max(minX,Math.min(maxX,x-dragFighter.w/2)),ny=Math.max(20,Math.min(H-dragFighter.h-20,y-dragFighter.h/2));
     dragFighter.x=nx;dragFighter.y=ny;dragFighter.targetX=nx;dragFighter.targetY=ny;dragFighter.manualMove=false;return;
@@ -3449,13 +3489,15 @@ function onPointerUp(e){
       _sendNetAction('drag',{key:dragFighter.key,side:dragFighter.side,x:dragFighter.x,y:dragFighter.y});
     dragFighter=null;charging=false;msg('');return;
   }
-  // Resolve which team is attacking vs defending this turn
-  const myTeam2=turnJ?teamJ:teamE;
-  const oppTeam2=turnJ?teamE:teamJ;
-  const inOppHalf2=turnJ?(x>W/2):(x<W/2);
-  const wallHit2=turnJ?(x>W*.7):(x<W*.3);
-  const wallX2=turnJ?W-20:20;
-  const type=touchStart.targetType;const pos=ball.owner;
+  // Resolve which team is throwing based on who ACTUALLY owns the ball
+  // (no depende de turnJ — cualquiera puede actuar si tiene el balón)
+  const pos=ball.owner;
+  const myTeam2=(pos&&pos.side==='r')?teamE:teamJ;
+  const oppTeam2=myTeam2===teamJ?teamE:teamJ;
+  const inOppHalf2=myTeam2===teamJ?(x>W/2):(x<W/2);
+  const wallHit2=myTeam2===teamJ?(x>W*.7):(x<W*.3);
+  const wallX2=myTeam2===teamJ?W-20:20;
+  const type=touchStart.targetType;
   if((type==='allyBall'||type==='enemy')&&charging){charging=false;if(leaderBuffActive.key==='muscle'&&ball.charge===MAX_CHARGE)ball.charge+=2;
     if(pos&&pos.alive){
       // Pase a aliado: solo si el dedo cae ENCIMA del aliado (radio pequeño 28px)
@@ -3742,7 +3784,7 @@ function throwBallFree(src, dx, dy, charge){
                w:0, h:0, alive:false, side:'none', jumping:false};
   if(src && src._throwTimer !== undefined) src._throwTimer = 22;
   if(src && src.side==='l') sfxThrow();
-  setTurn(false);
+  // (turnJ ya no se fuerza aquí: refleja posesión real, se actualiza al resolver el impacto)
   // ── Sincronizar lanzamiento libre con rival en modo sala ──
   if((sv._netVersus||isOnlineReal())&&src&&src.key){
     const myRole=myNetRole();
@@ -5130,17 +5172,12 @@ function _infBuildEnemies(floor,epos){
 // ═══════════════════ VERSUS MENU ═══════════════════
 function showVersusMenu(){
   $$('versusMenuModal').style.display='flex';
-  // Por defecto siempre POR TURNOS (más fiable). Se puede forzar
-  // simultáneo manualmente, pero ya no es la opción automática.
+  // Los turnos se eliminaron del juego: el Versus Compartido siempre
+  // corre en tiempo real, así que ya no hay nada que elegir aquí.
   const hint=$$('versusSharedHint');
   const toggleRow=$$('versusSimToggleRow');
-  if(hint)hint.textContent='Por turnos: cada uno elige equipo y se pasa el dispositivo';
-  if(toggleRow){
-    toggleRow.style.display='flex';
-    toggleRow.innerHTML=`
-      <button onclick="event.stopPropagation();closeVersusMenu();startVersusForced(false)" style="font-family:'Press Start 2P',monospace;font-size:5.5px;padding:6px 10px;border:1px solid #00d4ff55;color:#00d4ff;background:rgba(0,15,30,.5);cursor:pointer;border-radius:5px;">POR TURNOS (recomendado)</button>
-      <button onclick="event.stopPropagation();closeVersusMenu();startVersusForced(true)" style="font-family:'Press Start 2P',monospace;font-size:5.5px;padding:6px 10px;border:1px solid #00ff8855;color:#00ff88;background:rgba(0,30,15,.5);cursor:pointer;border-radius:5px;">SIMULTÁNEO (experimental)</button>`;
-  }
+  if(hint)hint.textContent='Tiempo real: ambos juegan a la vez en el mismo dispositivo';
+  if(toggleRow)toggleRow.style.display='none';
 }
 function closeVersusMenu(){
   $$('versusMenuModal').style.display='none';
@@ -5379,29 +5416,20 @@ function _netLaunchGame(hostSel,guestSel){
 function startVersus(){
   sv.gameMode='versus';
   sv._netVersus=false;
-  // Por defecto, el Versus Compartido usa SIEMPRE el modo POR TURNOS
-  // (cada jugador elige equipo y se pasa el dispositivo). El modo
-  // "simultáneo" (un solo dispositivo dividido por teclado/táctil)
-  // resultó poco fiable en la práctica, así que ya no se activa
-  // automáticamente — solo si el jugador lo elige a propósito desde
-  // el selector manual (startVersusForced).
-  versusSimultaneous=false;
+  // Los turnos se eliminaron de TODO el juego: el Versus Compartido
+  // siempre corre en tiempo real (ambos jugadores actúan a la vez en
+  // el mismo dispositivo, separados por teclado o por mitad de pantalla).
+  versusSimultaneous=true;
   versusPhase=1;
   selectedCharsJ2=new Set();leaderKeyJ2='';
   selectedChars=new Set(['mordecai','rigby','skips']);leaderKey='mordecai';
   show('sChar');buildCharSelect();
-  toast('MODO POR TURNOS: cada uno elige equipo y se pasa el dispositivo','#00d4ff');
 }
 
-// Permite cambiar manualmente el modo desde el menú VERSUS (ver abajo)
+// Conservada por compatibilidad — ya no hay modo "por turnos" que elegir,
+// así que siempre arranca en tiempo real sin importar el parámetro.
 function startVersusForced(simultaneous){
-  sv.gameMode='versus';
-  sv._netVersus=false;
-  versusSimultaneous=simultaneous;
-  versusPhase=1;
-  selectedCharsJ2=new Set();leaderKeyJ2='';
-  selectedChars=new Set(['mordecai','rigby','skips']);leaderKey='mordecai';
-  show('sChar');buildCharSelect();
+  startVersus();
 }
 
 // ════════════════════════════════════════════════════
