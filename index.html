@@ -1171,12 +1171,14 @@ body.mode-pc #sModes > *{
       <div style="display:flex;width:100%;max-width:860px;">
         <button class="shop-tab active" id="collTabChars" onclick="switchCollTab('chars')" style="border-bottom-color:var(--PU);">🧍 PERSONAJES</button>
         <button class="shop-tab" id="collTabBalls" onclick="switchCollTab('balls')">⚪ BALONES</button>
+        <button class="shop-tab" id="collTabChests" onclick="switchCollTab('chests')">📦 COFRES</button>
       </div>
     </div>
   </div>
   <div style="width:100%;max-width:860px;padding:14px;">
     <div id="collPanelChars" class="shop-panel active"><div id="rosterContent" style="width:100%;"></div></div>
     <div id="collPanelBalls" class="shop-panel"><div id="collBallsContent" style="width:100%;"></div></div>
+    <div id="collPanelChests" class="shop-panel"><div id="collChestsContent" style="width:100%;"></div></div>
   </div>
 </div>
 
@@ -1657,8 +1659,17 @@ let sv={
   unlockedBalls:['default'],equippedBall:'default',wins:0,gamesPlayed:0,
   charLevels:{},charXp:{},storyChapter:0,tournamentRound:0,gameMode:'quick',infiniteFloor:1,infiniteBest:0,
   challengeProgress:{},dailySeed:0,dailyDone:[],achievements:{},comboBest:0,
-  activeChalDiv:'bronze',storyProgress:{}
+  activeChalDiv:'bronze',storyProgress:{},
+  // ── Sistema de Cofres y Fichas ──
+  shards:{common:0,rare:0,epic:0}, // fichas de personaje, por rareza
+  ballShards:0,                    // fichas de balón (pool genérico)
+  chests:0,                        // cofres sin abrir
+  lastDailyChestTs:0,              // timestamp del último cofre diario reclamado
 };
+// Costo en fichas para desbloquear un personaje, según su rareza
+const RARITY_SHARD_COST={common:10,rare:30,epic:50};
+const RARITY_LABEL={common:'COMÚN',rare:'RARO',epic:'ÉPICO'};
+const RARITY_COLOR={common:'#8899aa',rare:'#3399ff',epic:'#cc44ff'};
 function loadSv(){
   try{const d=localStorage.getItem(SK);if(d)sv={...sv,...JSON.parse(d)};}catch(e){}
   Object.entries(sv.unlockedSkins||{}).forEach(([ck,sids])=>{
@@ -1687,9 +1698,12 @@ function switchShopTab(tab){
 function switchCollTab(tab){
   document.getElementById('collTabChars').classList.toggle('active', tab==='chars');
   document.getElementById('collTabBalls').classList.toggle('active', tab==='balls');
+  document.getElementById('collTabChests').classList.toggle('active', tab==='chests');
   document.getElementById('collPanelChars').classList.toggle('active', tab==='chars');
   document.getElementById('collPanelBalls').classList.toggle('active', tab==='balls');
+  document.getElementById('collPanelChests').classList.toggle('active', tab==='chests');
   if(tab==='balls') buildCollectionBalls();
+  if(tab==='chests') buildCollectionChests();
 }
 function buildCollectionBalls(){
   const cont=$$('collBallsContent');if(!cont)return;cont.innerHTML='';
@@ -1701,7 +1715,7 @@ function buildCollectionBalls(){
     card.style.setProperty('--ball-col',b.col);
     card.style.borderColor=active?b.col:'#1a1a2a';
     let statusHtml='';
-    if(!b.unlocked) statusHtml=b.eventOnly?`<div class="ball-card-status price" style="background:linear-gradient(90deg,#ffe600,#ff8800);color:#000;">EVENTO</div>`:`<div class="ball-card-status price">🪙 ${b.cost}</div>`;
+    if(!b.unlocked) statusHtml=b.eventOnly?`<div class="ball-card-status price" style="background:linear-gradient(90deg,#ffe600,#ff8800);color:#000;">EVENTO</div>`:(b.shardCost?`<div class="ball-card-status price" style="background:rgba(170,68,221,.12);border-color:rgba(170,68,221,.3);color:#cc88ff;">⚪ ${b.shardCost}</div>`:`<div class="ball-card-status price">🪙 ${b.cost}</div>`);
     else if(active)  statusHtml=`<div class="ball-card-status active">✓ EQUIPADO</div>`;
     else             statusHtml=`<div class="ball-card-status owned">EQUIPAR</div>`;
     card.innerHTML=`
@@ -1771,15 +1785,22 @@ function buy(t){
 }
 function unlockChar(key){
   const c=CHARS[key];if(!c||sv.unlockedChars.includes(key))return;
-  const cur=c.unlock===2?'tickets':'coins';const cost=c.cost;
-  if(cur==='tickets'&&sv.tickets<cost){toast('¡Necesitas 🎫 '+cost+' fichas!');return;}
-  if(cur==='coins'&&sv.coins<cost){toast('¡Necesitas 🪙 '+cost+' monedas!');return;}
-  if(cur==='tickets')sv.tickets-=cost;else sv.coins-=cost;
+  if(!c.cost||c.cost<=0)return; // starters, no desbloqueo necesario
+  const rarity=c.rarity||'common';const need=RARITY_SHARD_COST[rarity];
+  sv.shards=sv.shards||{common:0,rare:0,epic:0};
+  if((sv.shards[rarity]||0)<need){toast('Necesitas '+need+' Fichas '+RARITY_LABEL[rarity]+' ('+(sv.shards[rarity]||0)+'/'+need+')','#ff4444');return;}
+  sv.shards[rarity]-=need;
   sv.unlockedChars.push(key);saveSv();toast('¡'+charName(c)+' DESBLOQUEADO!','#00ff88');buildRoster();
 }
 function unlockBall(id){
   const b=BALL_SKINS.find(x=>x.id===id);if(!b||b.unlocked){toast('Ya tienes esta skin');return;}
   if(b.eventOnly){toast('🔒 Skin exclusiva de eventos — disponible solo durante eventos especiales');return;}
+  if(b.shardCost){
+    sv.ballShards=sv.ballShards||0;
+    if(sv.ballShards<b.shardCost){toast('Necesitas '+b.shardCost+' Fichas de Balón ('+sv.ballShards+'/'+b.shardCost+') — consíguelas en Cofres','#ff4444');return;}
+    sv.ballShards-=b.shardCost;b.unlocked=true;saveSv();toast('¡BALÓN '+b.name+' DESBLOQUEADO!','#ffe600');buildCustomize();buildCollectionBalls();
+    return;
+  }
   if(sv.coins<b.cost){toast('Sin monedas');return;}sv.coins-=b.cost;b.unlocked=true;saveSv();toast('¡BALÓN '+b.name+' DESBLOQUEADO!','#ffe600');buildCustomize();
 }
 function unlockCharSkin(ck,sid){
@@ -1788,6 +1809,95 @@ function unlockCharSkin(ck,sid){
 }
 function equipBall(id){const b=BALL_SKINS.find(x=>x.id===id);if(!b||!b.unlocked){toast('Desbloquea primero');return;}selectedBallSkin=id;sv.equippedBall=id;saveSv();buildCustomize();}
 function equipCharSkin(ck,sid){const c=CHARS[ck];if(!c)return;const s=c.skins.find(x=>x.id===sid);if(!s||!s.unlocked){toast('Desbloquea primero');return;}sv.equippedSkins[ck]=sid;saveSv();buildCustomize();}
+
+// ════════════════════════════════════════════════════════════
+// SISTEMA DE COFRES — fuente de Fichas de Personaje y de Balón
+// ════════════════════════════════════════════════════════════
+const CHEST_DAILY_MS=24*60*60*1000;
+
+// Cada cofre da 2 recompensas independientes, cada una sorteada de esta tabla
+function _rollChestReward(){
+  const r=Math.random();
+  if(r<0.55) return {type:'common',amt:2};
+  if(r<0.77) return {type:'rare',amt:1};
+  if(r<0.83) return {type:'epic',amt:1};
+  return {type:'ball',amt:3};
+}
+function openChest(){
+  sv.chests=sv.chests||0;
+  if(sv.chests<1){toast('No tienes cofres. ¡Gana partidas o reclama el diario!','#ff4444');return;}
+  sv.chests--;
+  sv.shards=sv.shards||{common:0,rare:0,epic:0};sv.ballShards=sv.ballShards||0;
+  const rewards=[_rollChestReward(),_rollChestReward()];
+  const lines=[];
+  rewards.forEach(r=>{
+    if(r.type==='ball'){sv.ballShards+=r.amt;lines.push('⚪ +'+r.amt+' Fichas de Balón');}
+    else{sv.shards[r.type]=(sv.shards[r.type]||0)+r.amt;lines.push((r.type==='common'?'🟢':r.type==='rare'?'🔵':'🟣')+' +'+r.amt+' Fichas '+RARITY_LABEL[r.type]);}
+  });
+  saveSv();
+  toast(lines.join(' · '),'#ffe600');
+  buildCollectionChests();
+}
+function claimDailyChest(){
+  sv.lastDailyChestTs=sv.lastDailyChestTs||0;
+  if(Date.now()-sv.lastDailyChestTs<CHEST_DAILY_MS){toast('Ya reclamaste tu cofre diario. Vuelve más tarde.','#ff8800');return;}
+  sv.lastDailyChestTs=Date.now();sv.chests=(sv.chests||0)+1;saveSv();
+  toast('📦 ¡Cofre diario reclamado!','#00ff88');buildCollectionChests();
+}
+// Chance de obtener un cofre extra al ganar una partida (se llama desde el flujo de victoria)
+function maybeDropWinChest(){
+  if(Math.random()<0.20){sv.chests=(sv.chests||0)+1;saveSv();toast('📦 ¡Cofre obtenido por la victoria!','#00d4ff');}
+}
+function buildCollectionChests(){
+  const cont=$$('collChestsContent');if(!cont)return;
+  sv.shards=sv.shards||{common:0,rare:0,epic:0};sv.ballShards=sv.ballShards||0;sv.chests=sv.chests||0;
+  const msLeft=Math.max(0,CHEST_DAILY_MS-(Date.now()-(sv.lastDailyChestTs||0)));
+  const canDaily=msLeft<=0;
+  const hrs=Math.floor(msLeft/3600000),mins=Math.floor((msLeft%3600000)/60000);
+  cont.innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:16px;align-items:center;">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;width:100%;">
+        <div style="background:#0d0d1c;border:2px solid #8899aa44;border-radius:12px;padding:12px 18px;text-align:center;min-width:100px;">
+          <div style="font-size:20px;">🟢</div>
+          <div style="font-size:9px;color:#8899aa;margin-top:4px;">${sv.shards.common||0}</div>
+          <div style="font-size:5px;color:#556;margin-top:2px;">COMUNES</div>
+        </div>
+        <div style="background:#0d0d1c;border:2px solid #3399ff44;border-radius:12px;padding:12px 18px;text-align:center;min-width:100px;">
+          <div style="font-size:20px;">🔵</div>
+          <div style="font-size:9px;color:#3399ff;margin-top:4px;">${sv.shards.rare||0}</div>
+          <div style="font-size:5px;color:#556;margin-top:2px;">RARAS</div>
+        </div>
+        <div style="background:#0d0d1c;border:2px solid #cc44ff44;border-radius:12px;padding:12px 18px;text-align:center;min-width:100px;">
+          <div style="font-size:20px;">🟣</div>
+          <div style="font-size:9px;color:#cc44ff;margin-top:4px;">${sv.shards.epic||0}</div>
+          <div style="font-size:5px;color:#556;margin-top:2px;">ÉPICAS</div>
+        </div>
+        <div style="background:#0d0d1c;border:2px solid #ffffff33;border-radius:12px;padding:12px 18px;text-align:center;min-width:100px;">
+          <div style="font-size:20px;">⚪</div>
+          <div style="font-size:9px;color:#ccc;margin-top:4px;">${sv.ballShards}</div>
+          <div style="font-size:5px;color:#556;margin-top:2px;">DE BALÓN</div>
+        </div>
+      </div>
+
+      <div style="width:100%;max-width:340px;background:linear-gradient(160deg,#1a1230,#0a0818);border:2px solid #aa44dd55;border-radius:18px;padding:22px;text-align:center;box-shadow:0 8px 24px rgba(170,68,221,.15);">
+        <div style="font-size:46px;">📦</div>
+        <div style="font-size:10px;color:#cc88ff;margin-top:8px;letter-spacing:1px;">COFRES: ${sv.chests}</div>
+        <button class="uBtn" style="margin-top:12px;width:100%;border-color:var(--Y);color:var(--Y);" onclick="openChest()" ${sv.chests<1?'disabled style="opacity:.4;"':''}>ABRIR COFRE</button>
+      </div>
+
+      <div style="width:100%;max-width:340px;background:#0d0d1c;border:2px solid #00ff8844;border-radius:14px;padding:14px;text-align:center;">
+        <div style="font-size:7px;color:#00ff88;letter-spacing:1px;">COFRE DIARIO GRATIS</div>
+        ${canDaily
+          ?`<button class="uBtn" style="margin-top:8px;width:100%;border-color:#00ff88;color:#00ff88;" onclick="claimDailyChest()">RECLAMAR</button>`
+          :`<div style="font-size:6px;color:#556;margin-top:8px;">Disponible en ${hrs}h ${mins}m</div>`}
+      </div>
+
+      <div style="font-size:5.5px;color:#445;text-align:center;line-height:1.8;max-width:340px;">
+        Gana partidas para tener 20% de chance de un cofre extra.<br>
+        Usa las fichas en PERSONAJES y BALONES para desbloquear contenido.
+      </div>
+    </div>`;
+}
 
 // ═══════════════════ UTILS ═══════════════════
 const $$=id=>document.getElementById(id);
@@ -2018,12 +2128,28 @@ const CHARS={
     ),
     skins:[
       {id:'default_mordecai',name:'POR DEFECTO',icon:'https://chibi.iitranq.co.uk/AenvlqnAYIn7.jpg',img:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',cost:0,unlocked:true,
-        sprites:mkSprites('https://chibi.iitranq.co.uk/AzGqed7GTFey.png','https://static.wikia.nocookie.net/regularshow/images/4/4c/Mordecai_running.gif/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/7/79/Mordecai_throwing.png/revision/latest/scale-to-width-down/200','https://chibi.iitranq.co.uk/AzGqed7GTFey.png','https://static.wikia.nocookie.net/regularshow/images/3/3e/Mordecai_scared.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/5/59/Mordecai_angry.png/revision/latest/scale-to-width-down/200')},
-      {id:'future_mordecai',name:'FUTURO',icon:'https://chibi.iitranq.co.uk/VOcf0o8BninG.jpg',img:'https://chibi.iitranq.co.uk/2aPrWYFQoT91.png',cost:80,unlocked:false,
-        sprites:mkSprites('https://chibi.iitranq.co.uk/2aPrWYFQoT91.png')},
-      {id:'dumped_mordecai',name:'BOTADO',icon:'https://chibi.iitranq.co.uk/NWN0IQeLJJBy.jpg',img:'https://chibi.iitranq.co.uk/PH3nL2rYl1zu.png',cost:80,unlocked:false,
-        sprites:mkSprites('https://chibi.iitranq.co.uk/PH3nL2rYl1zu.png')}
+        sprites:mkSprites('https://chibi.iitranq.co.uk/AzGqed7GTFey.png','https://static.wikia.nocookie.net/regularshow/images/4/4c/Mordecai_running.gif/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/7/79/Mordecai_throwing.png/revision/latest/scale-to-width-down/200','https://chibi.iitranq.co.uk/AzGqed7GTFey.png','https://static.wikia.nocookie.net/regularshow/images/3/3e/Mordecai_scared.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/5/59/Mordecai_angry.png/revision/latest/scale-to-width-down/200')}
     ],
+    super:'MORDO BLAST',superFn:'superMordecai',leaderBuff:'BUFF: Todo el equipo +1 daño'
+  },
+  // MORDECAI FUTURO — antes era una skin, ahora personaje independiente (Raro)
+  mordecai_future:{
+    name:'Mordecai Futuro',role:'ATAQUE',col:'#00c8ff',unlock:1,cost:180,atq:4,def:2,spd:3,
+    icon:'https://chibi.iitranq.co.uk/VOcf0o8BninG.jpg',
+    img:'https://chibi.iitranq.co.uk/2aPrWYFQoT91.png',
+    sprites:mkSprites('https://chibi.iitranq.co.uk/2aPrWYFQoT91.png'),
+    skins:[{id:'default',name:'DEFAULT',icon:'https://chibi.iitranq.co.uk/VOcf0o8BninG.jpg',img:'https://chibi.iitranq.co.uk/2aPrWYFQoT91.png',cost:0,unlocked:true,
+      sprites:mkSprites('https://chibi.iitranq.co.uk/2aPrWYFQoT91.png')}],
+    super:'MORDO BLAST',superFn:'superMordecai',leaderBuff:'BUFF: Todo el equipo +1 daño'
+  },
+  // MORDECAI BOTADO — antes era una skin, ahora personaje independiente (Raro)
+  mordecai_dumped:{
+    name:'Mordecai Botado',role:'ATAQUE',col:'#00c8ff',unlock:1,cost:180,atq:4,def:2,spd:3,
+    icon:'https://chibi.iitranq.co.uk/NWN0IQeLJJBy.jpg',
+    img:'https://chibi.iitranq.co.uk/PH3nL2rYl1zu.png',
+    sprites:mkSprites('https://chibi.iitranq.co.uk/PH3nL2rYl1zu.png'),
+    skins:[{id:'default',name:'DEFAULT',icon:'https://chibi.iitranq.co.uk/NWN0IQeLJJBy.jpg',img:'https://chibi.iitranq.co.uk/PH3nL2rYl1zu.png',cost:0,unlocked:true,
+      sprites:mkSprites('https://chibi.iitranq.co.uk/PH3nL2rYl1zu.png')}],
     super:'MORDO BLAST',superFn:'superMordecai',leaderBuff:'BUFF: Todo el equipo +1 daño'
   },
   //RIGBY
@@ -2041,10 +2167,18 @@ const CHARS={
     ),
     skins:[
       {id:'default',name:'DEFAULT',icon:'https://chibi.iitranq.co.uk/bQdsQ2NRwJHo.jpg',img:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',cost:0,unlocked:true,
-        sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png','https://static.wikia.nocookie.net/regularshow/images/6/6e/Rigby_running.gif/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/b/b1/Rigby_throwing.png/revision/latest/scale-to-width-down/200','https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png','https://static.wikia.nocookie.net/regularshow/images/4/49/Rigby_scared.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/3/33/Rigby_angry.png/revision/latest/scale-to-width-down/200')},
-      {id:'future_rigby',name:'FUTURE',icon:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',img:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',cost:80,unlocked:false,
-        sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png')}
+        sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png','https://static.wikia.nocookie.net/regularshow/images/6/6e/Rigby_running.gif/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/b/b1/Rigby_throwing.png/revision/latest/scale-to-width-down/200','https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png','https://static.wikia.nocookie.net/regularshow/images/4/49/Rigby_scared.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/3/33/Rigby_angry.png/revision/latest/scale-to-width-down/200')}
     ],
+    super:'TECH KWON DO',superFn:'superRigby',leaderBuff:'BUFF: Pases +50% velocidad'
+  },
+  // RIGBY FUTURO — antes era una skin, ahora personaje independiente (Común)
+  rigby_future:{
+    name:'Rigby Futuro',role:'VELOCIDAD',col:'#aa7733',unlock:1,cost:120,atq:3,def:1,spd:5,
+    icon:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',
+    img:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',
+    sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png'),
+    skins:[{id:'default',name:'DEFAULT',icon:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',img:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',cost:0,unlocked:true,
+      sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png')}],
     super:'TECH KWON DO',superFn:'superRigby',leaderBuff:'BUFF: Pases +50% velocidad'
   },
  //SKIPS
@@ -2062,10 +2196,18 @@ const CHARS={
     ),
     skins:[
       {id:'default',name:'DEFAULT',icon:'💪',img:'https://chibi.iitranq.co.uk/AjLVlYgSczxD.png',cost:0,unlocked:true,
-        sprites:mkSprites('https://chibi.iitranq.co.uk/AjLVlYgSczxD.png','https://static.wikia.nocookie.net/regularshow/images/5/5d/Skips_skipping.gif/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/e/e4/Skips_throws.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/2/2e/Skips_flexing.png/revision/latest/scale-to-width-down/200','https://chibi.iitranq.co.uk/AjLVlYgSczxD.png','https://static.wikia.nocookie.net/regularshow/images/c/c0/Skips_fighting.png/revision/latest/scale-to-width-down/200')},
-      {id:'young',name:'JOVEN',icon:'🧒',img:'https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200',cost:100,unlocked:false,
-        sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200')}
+        sprites:mkSprites('https://chibi.iitranq.co.uk/AjLVlYgSczxD.png','https://static.wikia.nocookie.net/regularshow/images/5/5d/Skips_skipping.gif/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/e/e4/Skips_throws.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/2/2e/Skips_flexing.png/revision/latest/scale-to-width-down/200','https://chibi.iitranq.co.uk/AjLVlYgSczxD.png','https://static.wikia.nocookie.net/regularshow/images/c/c0/Skips_fighting.png/revision/latest/scale-to-width-down/200')}
     ],
+    super:'BIONIC BARRIER',superFn:'superSkips',leaderBuff:'BUFF: Ventana de bloqueo x2'
+  },
+  // SKIPS JOVEN — antes era una skin, ahora personaje independiente (Común)
+  skips_young:{
+    name:'Skips Joven',role:'DEFENSA',col:'#eeddaa',unlock:1,cost:130,atq:2,def:5,spd:2,
+    icon:'🧒',
+    img:'https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200',
+    sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200'),
+    skins:[{id:'default',name:'DEFAULT',icon:'🧒',img:'https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200',cost:0,unlocked:true,
+      sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200')}],
     super:'BIONIC BARRIER',superFn:'superSkips',leaderBuff:'BUFF: Ventana de bloqueo x2'
   },
  //BENSON
@@ -2298,7 +2440,12 @@ const CHARS={
     super:'EAGLE DIVE',superFn:'superAudrey',leaderBuff:'BUFF: Primer tiro sin posibilidad de contra'
   },
 };
-
+// ── Asignar rareza a cada personaje bloqueado, según su costo original ──
+// Común: hasta 160 · Raro: 161-220 · Épico: 221+ (jefes/legendarios)
+Object.entries(CHARS).forEach(([k,c])=>{
+  if(!c.cost||c.cost<=0)return; // starters (Mordecai/Rigby/Skips) no necesitan rareza
+  c.rarity = c.cost<=160 ? 'common' : c.cost<=220 ? 'rare' : 'epic';
+});
 const ENEMY_DEFS=[
   {name:'Doom',col:'#ff2277',img:'https://static.wikia.nocookie.net/regularshow/images/0/04/Big_Terrible_Tooth.png/revision/latest/scale-to-width-down/200',sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/0/04/Big_Terrible_Tooth.png/revision/latest/scale-to-width-down/200'),super:'Tiro Maldito',superFn:'eSuperDoom'},
   {name:'Bane',col:'#ff6600',img:'https://static.wikia.nocookie.net/regularshow/images/1/15/Muscle_Bro.png/revision/latest/scale-to-width-down/200',sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/1/15/Muscle_Bro.png/revision/latest/scale-to-width-down/200'),super:'Aplastamiento',superFn:'eSuperBane'},
@@ -2313,16 +2460,19 @@ const BALL_SKINS=[
   {id:'red',name:'BALÓN ROJO',col:'#ff3344',glowCol:'#ff8866',cost:40,unlocked:false,emoji:'🔴',imgUrl:'https://chibi.iitranq.co.uk/Ziuk0r3EI3ES.png'},
   {id:'fire',name:'BALÓN DE FUEGO',col:'#ff2200',glowCol:'#ff8800',cost:80,unlocked:false,emoji:'🔥',imgUrl:'https://chibi.iitranq.co.uk/mNfxjAAJZ7FS.png'},
   {id:'ice',name:'BALÓN DE HIELO',col:'#66ddff',glowCol:'#ffffff',cost:90,unlocked:false,emoji:'❄️',imgUrl:'https://chibi.iitranq.co.uk/40259UCzTYAj.png'},
-  {id:'cyber',name:'BALÓN CYBER',col:'#00ffff',glowCol:'#00aaff',cost:100,unlocked:false,emoji:'🔵',imgUrl:'https://chibi.iitranq.co.uk/C3iNbxHf9Rui.png'},
-  {id:'tech',name:'BALÓN TECH',col:'#33ff99',glowCol:'#00ffcc',cost:110,unlocked:false,emoji:'⚙️',imgUrl:'https://chibi.iitranq.co.uk/hI5S3PUuMBgX.png'},
-  {id:'pixel',name:'BALÓN PIXEL',col:'#ffaa00',glowCol:'#ffee44',cost:90,unlocked:false,emoji:'🟧',imgUrl:'https://chibi.iitranq.co.uk/OvFT1kaey1Mw.png'},
-  {id:'lowpoly',name:'BALÓN LOW POLY',col:'#88ccff',glowCol:'#aaffee',cost:110,unlocked:false,emoji:'🔷',imgUrl:'https://chibi.iitranq.co.uk/3aDSYMcyP9ao.png'},
   {id:'draw',name:'BALÓN DIBUJADO',col:'#ffffff',glowCol:'#ffddaa',cost:90,unlocked:false,emoji:'✏️',imgUrl:'https://chibi.iitranq.co.uk/e4ezrWhqAITn.png'},
-  {id:'ghost',name:'BALÓN FANTASMA',col:'#aaddff',glowCol:'#ffffff',cost:120,unlocked:false,emoji:'👻',imgUrl:'https://chibi.iitranq.co.uk/CQolODtxKOAU.png'},
-  {id:'galaxy',name:'BALÓN GALAXIA',col:'#cc44ff',glowCol:'#ff44cc',cost:150,unlocked:false,emoji:'🟣',imgUrl:'https://chibi.iitranq.co.uk/zorf4yXz2q7E.png'},
-  {id:'gold',name:'BALÓN ORO',col:'#ffd700',glowCol:'#ffaa00',cost:200,unlocked:false,emoji:'🟡',imgUrl:'https://chibi.iitranq.co.uk/oItH0GUhIOH8.png'},
-  {id:'diamond',name:'BALÓN DIAMANTE',col:'#a8e4ff',glowCol:'#ffffff',cost:280,unlocked:false,emoji:'💎',imgUrl:'https://chibi.iitranq.co.uk/eRLGgfyMgTbc.png'},
-  {id:'chaosphere',name:'CHAOSPHERE',col:'#cc44ff',glowCol:'#ff00ff',cost:600,unlocked:false,emoji:'🌀',imgUrl:'https://chibi.iitranq.co.uk/XhP12zwmJBlh.png'},
+  // ── A partir de aquí: desbloqueo por FICHAS DE BALÓN (cofres), no monedas ──
+  // NOTA: 'pixel' se mueve aquí porque se confunde visualmente con el clásico.
+  // Pendiente: añadir un "BALÓN 8-BIT" más pixelado como reemplazo barato (coins).
+  {id:'pixel',name:'BALÓN PIXEL',col:'#ffaa00',glowCol:'#ffee44',cost:0,shardCost:8,unlocked:false,emoji:'🟧',imgUrl:'https://chibi.iitranq.co.uk/OvFT1kaey1Mw.png'},
+  {id:'cyber',name:'BALÓN CYBER',col:'#00ffff',glowCol:'#00aaff',cost:0,shardCost:10,unlocked:false,emoji:'🔵',imgUrl:'https://chibi.iitranq.co.uk/C3iNbxHf9Rui.png'},
+  {id:'tech',name:'BALÓN TECH',col:'#33ff99',glowCol:'#00ffcc',cost:0,shardCost:12,unlocked:false,emoji:'⚙️',imgUrl:'https://chibi.iitranq.co.uk/hI5S3PUuMBgX.png'},
+  {id:'lowpoly',name:'BALÓN LOW POLY',col:'#88ccff',glowCol:'#aaffee',cost:0,shardCost:12,unlocked:false,emoji:'🔷',imgUrl:'https://chibi.iitranq.co.uk/3aDSYMcyP9ao.png'},
+  {id:'ghost',name:'BALÓN FANTASMA',col:'#aaddff',glowCol:'#ffffff',cost:0,shardCost:14,unlocked:false,emoji:'👻',imgUrl:'https://chibi.iitranq.co.uk/CQolODtxKOAU.png'},
+  {id:'galaxy',name:'BALÓN GALAXIA',col:'#cc44ff',glowCol:'#ff44cc',cost:0,shardCost:18,unlocked:false,emoji:'🟣',imgUrl:'https://chibi.iitranq.co.uk/zorf4yXz2q7E.png'},
+  {id:'gold',name:'BALÓN ORO',col:'#ffd700',glowCol:'#ffaa00',cost:0,shardCost:25,unlocked:false,emoji:'🟡',imgUrl:'https://chibi.iitranq.co.uk/oItH0GUhIOH8.png'},
+  {id:'diamond',name:'BALÓN DIAMANTE',col:'#a8e4ff',glowCol:'#ffffff',cost:0,shardCost:35,unlocked:false,emoji:'💎',imgUrl:'https://chibi.iitranq.co.uk/eRLGgfyMgTbc.png'},
+  {id:'chaosphere',name:'CHAOSPHERE',col:'#cc44ff',glowCol:'#ff00ff',cost:0,shardCost:70,unlocked:false,emoji:'🌀',imgUrl:'https://chibi.iitranq.co.uk/XhP12zwmJBlh.png'},
   {id:'popshead',name:'CABEZA DE POPS',col:'#ffe600',glowCol:'#fff7aa',cost:0,unlocked:false,emoji:'👑',imgUrl:'https://chibi.iitranq.co.uk/gD6MysKb4IlC.png',eventOnly:true},
 ];
 let selectedBallSkin='default';
@@ -2557,7 +2707,21 @@ function openCardPopup(k,mode){
   $$('cpSuper').textContent='⚡ SUPER: '+c.super;$$('cpBuff').textContent=c.leaderBuff;
   let btns='';
   if(!isUnlocked){
-    const cur=c.unlock===2?'🎫':'🪙';btns+=`<button class="uBtn" onclick="unlockChar('${k}');closeCardPopup();" style="border-color:var(--Y);color:var(--Y);">DESBLOQUEAR ${cur}${c.cost}</button>`;
+    if(c.cost>0){
+      const rarity=c.rarity||'common';const need=RARITY_SHARD_COST[rarity];
+      const have=(sv.shards&&sv.shards[rarity])||0;const can=have>=need;
+      const rcol=RARITY_COLOR[rarity];
+      btns+=`<div style="width:100%;display:flex;flex-direction:column;gap:6px;">
+        <div style="font-size:6px;color:${rcol};letter-spacing:1px;">RAREZA: ${RARITY_LABEL[rarity]}</div>
+        <div style="width:100%;height:8px;background:#1a1a2a;border-radius:5px;overflow:hidden;">
+          <div style="height:100%;width:${Math.min(100,have/need*100)}%;background:${rcol};"></div>
+        </div>
+        <div style="font-size:6px;color:#889;">${have}/${need} Fichas ${RARITY_LABEL[rarity]}</div>
+        ${can
+          ?`<button class="uBtn" onclick="unlockChar('${k}');closeCardPopup();" style="border-color:var(--Y);color:var(--Y);">DESBLOQUEAR</button>`
+          :`<button class="uBtn" onclick="closeCardPopup();show('sRoster');switchCollTab('chests');" style="border-color:${rcol};color:${rcol};">📦 IR A COFRES</button>`}
+      </div>`;
+    }
   }else if(mode==='team'){
     const isSel=selectedChars.has(k);const isLeader=leaderKey===k;
     if(isSel&&!isLeader)btns+=`<button class="uBtn" onclick="setLeader('${k}');closeCardPopup();" style="border-color:#cc44ff;color:#cc44ff;">⭐ HACER LÍDER</button>`;
@@ -2824,7 +2988,7 @@ function buildCustomize(){
     card.style.setProperty('--ball-col',b.col);
     card.style.borderColor=active?b.col:'#1a1a2a';
     let statusHtml='';
-    if(!b.unlocked) statusHtml=b.eventOnly?`<div class="ball-card-status price" style="background:linear-gradient(90deg,#ffe600,#ff8800);color:#000;">EVENTO</div>`:`<div class="ball-card-status price">🪙 ${b.cost}</div>`;
+    if(!b.unlocked) statusHtml=b.eventOnly?`<div class="ball-card-status price" style="background:linear-gradient(90deg,#ffe600,#ff8800);color:#000;">EVENTO</div>`:(b.shardCost?`<div class="ball-card-status price" style="background:rgba(170,68,221,.12);border-color:rgba(170,68,221,.3);color:#cc88ff;">⚪ ${b.shardCost}</div>`:`<div class="ball-card-status price">🪙 ${b.cost}</div>`);
     else if(active)  statusHtml=`<div class="ball-card-status active">✓ EQUIPADO</div>`;
     else             statusHtml=`<div class="ball-card-status owned">EQUIPAR</div>`;
     card.innerHTML=`
@@ -4038,6 +4202,7 @@ function endGame(win){
     if(win===true){
       const reward=_infCoinReward(floor);
       sv.coins+=reward;sv.wins=(sv.wins||0)+1;sv.gamesPlayed=(sv.gamesPlayed||0)+1;
+      maybeDropWinChest();
       [...selectedChars].forEach(k=>addCharXp(k,20+floor*2));
       if(floor>(sv.infiniteBest||0))sv.infiniteBest=floor;
       sv.infiniteFloor=floor+1;saveSv();
@@ -4079,6 +4244,7 @@ function endGame(win){
     }
     const coinReward=mode==='online'||mode==='online_bot'?80:mode==='tournament'?200:mode==='story'?160:mode==='challenge'?100:120;
     sv.coins+=coinReward;sv.wins=(sv.wins||0)+1;sv.gamesPlayed=(sv.gamesPlayed||0)+1;
+    maybeDropWinChest();
     [...selectedChars].forEach(k=>addCharXp(k,30));
     if(comboMax>(sv.comboBest||0)){sv.comboBest=comboMax;if(comboMax>=10)sv.achievements['combo_king']=true;}
     let bonusTxt='';if(sv.wins%3===0){sv.tickets=(sv.tickets||0)+1;bonusTxt=' +1 🎫 FICHA RARA!';}
