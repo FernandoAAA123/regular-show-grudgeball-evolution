@@ -1149,6 +1149,7 @@ body.mode-pc #sModes > *{
     </div>
     <div class="cpName" id="cpName"></div>
     <div class="cpRole" id="cpRole"></div>
+    <div id="cpRarity" style="font-size:5.5px;letter-spacing:1px;margin-top:2px;display:none;"></div>
     <div class="cpLvRow">
       <div class="cpLvNum" id="cpLv">LV 1</div>
       <div class="cpXpBar"><div class="cpXpFill" id="cpXpFill" style="width:0%"></div></div>
@@ -1668,15 +1669,19 @@ let sv={
   challengeProgress:{},dailySeed:0,dailyDone:[],achievements:{},comboBest:0,
   activeChalDiv:'bronze',storyProgress:{},
   // ── Sistema de Cofres y Fichas ──
-  shards:{common:0,rare:0,epic:0}, // fichas de personaje, por rareza
-  ballShards:0,                    // fichas de balón (pool genérico)
+  charShards:{},                   // fichas ÚNICAS por personaje: {charKey: cantidad}
+  ballShards:{},                   // fichas ÚNICAS por balón: {ballId: cantidad}
   chests:0,                        // cofres sin abrir
   lastDailyChestTs:0,              // timestamp del último cofre diario reclamado
 };
 // Costo en fichas para desbloquear un personaje, según su rareza
-const RARITY_SHARD_COST={common:10,rare:30,epic:50};
-const RARITY_LABEL={common:'COMÚN',rare:'RARO',epic:'ÉPICO'};
-const RARITY_COLOR={common:'#8899aa',rare:'#3399ff',epic:'#cc44ff'};
+// Lógica invertida: las fichas COMUNES son más fáciles de encontrar → se necesitan MÁS.
+// Las fichas LEGENDARIAS son muy raras de encontrar → se necesitan MENOS.
+// Umbral de fichas ÚNICAS por personaje (cada personaje tiene su propia ficha,
+// no un pool compartido). Lógica invertida: común = más fácil de encontrar = pide más.
+const CHAR_RARITY_SHARD_COST={common:15,rare:10,epic:6,legendary:3};
+const RARITY_LABEL={common:'COMÚN',rare:'RARO',epic:'ÉPICO',legendary:'LEGENDARIO'};
+const RARITY_COLOR={common:'#8899aa',rare:'#3399ff',epic:'#cc44ff',legendary:'#ffaa00'};
 function loadSv(){
   try{const d=localStorage.getItem(SK);if(d)sv={...sv,...JSON.parse(d)};}catch(e){}
   Object.entries(sv.unlockedSkins||{}).forEach(([ck,sids])=>{
@@ -1712,6 +1717,26 @@ function switchCollTab(tab){
   if(tab==='balls') buildCollectionBalls();
   if(tab==='chests') buildCollectionChests();
 }
+// Genera el HTML de estado de una carta de balón: precio/fichas/exclusiva/equipado
+function _ballStatusHtml(b,active){
+  if(!b.unlocked){
+    if(b.eventOnly)return `<div class="ball-card-status price" style="background:linear-gradient(90deg,#ffe600,#ff8800);color:#000;">EVENTO</div>`;
+    if(b.charUnlock)return `<div class="ball-card-status price" style="background:rgba(204,0,255,.15);border-color:rgba(204,0,255,.4);color:#cc66ff;">EXCLUSIVA</div>`;
+    if(b.rarity){
+      const need=BALL_RARITY_SHARD_COST[b.rarity];
+      sv.ballShards=sv.ballShards||{};
+      const have=sv.ballShards[b.id]||0;
+      const rcol=RARITY_COLOR[b.rarity];
+      return `<div style="display:flex;flex-direction:column;gap:3px;align-items:center;">
+        <div class="ball-card-status price" style="background:${rcol}22;border-color:${rcol}55;color:${rcol};">${RARITY_LABEL[b.rarity]}</div>
+        <div style="font-size:4.5px;color:#889;">${have}/${need} fichas</div>
+      </div>`;
+    }
+    return `<div class="ball-card-status price">🪙 ${b.cost}</div>`;
+  }
+  if(active)return `<div class="ball-card-status active">✓ EQUIPADO</div>`;
+  return `<div class="ball-card-status owned">EQUIPAR</div>`;
+}
 function buildCollectionBalls(){
   const cont=$$('collBallsContent');if(!cont)return;cont.innerHTML='';
   const grid=document.createElement('div');grid.className='ball-grid';
@@ -1721,16 +1746,12 @@ function buildCollectionBalls(){
     card.className='ball-card'+(active?' equipped':'')+(b.unlocked?'':' locked');
     card.style.setProperty('--ball-col',b.col);
     card.style.borderColor=active?b.col:'#1a1a2a';
-    let statusHtml='';
-    if(!b.unlocked) statusHtml=b.eventOnly?`<div class="ball-card-status price" style="background:linear-gradient(90deg,#ffe600,#ff8800);color:#000;">EVENTO</div>`:b.charUnlock?`<div class="ball-card-status price" style="background:rgba(204,0,255,.15);border-color:rgba(204,0,255,.4);color:#cc66ff;">EXCLUSIVA</div>`:(b.shardCost?`<div class="ball-card-status price" style="background:rgba(170,68,221,.12);border-color:rgba(170,68,221,.3);color:#cc88ff;">⚪ ${b.shardCost}</div>`:`<div class="ball-card-status price">🪙 ${b.cost}</div>`);
-    else if(active)  statusHtml=`<div class="ball-card-status active">✓ EQUIPADO</div>`;
-    else             statusHtml=`<div class="ball-card-status owned">EQUIPAR</div>`;
     card.innerHTML=`
       <img class="ball-card-img" src="${b.imgUrl||''}" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex';" alt="">
       <div class="img-fallback">${b.emoji||'⚪'}</div>
       ${!b.unlocked?`<div class="ball-card-lock"><span style="font-size:20px;">🔒</span></div>`:''}
       <div class="ball-card-name" style="color:${b.col};">${b.name}</div>
-      ${statusHtml}`;
+      ${_ballStatusHtml(b,active)}`;
     card.onclick=()=>{(b.unlocked?equipBall(b.id):unlockBall(b.id));buildCollectionBalls();};
     grid.appendChild(card);
   });
@@ -1793,10 +1814,11 @@ function buy(t){
 function unlockChar(key){
   const c=CHARS[key];if(!c||sv.unlockedChars.includes(key))return;
   if(!c.cost||c.cost<=0)return; // starters, no desbloqueo necesario
-  const rarity=c.rarity||'common';const need=RARITY_SHARD_COST[rarity];
-  sv.shards=sv.shards||{common:0,rare:0,epic:0};
-  if((sv.shards[rarity]||0)<need){toast('Necesitas '+need+' Fichas '+RARITY_LABEL[rarity]+' ('+(sv.shards[rarity]||0)+'/'+need+')','#ff4444');return;}
-  sv.shards[rarity]-=need;
+  const rarity=c.rarity||'common';const need=CHAR_RARITY_SHARD_COST[rarity];
+  sv.charShards=sv.charShards||{};
+  const have=sv.charShards[key]||0;
+  if(have<need){toast('Necesitas '+need+' Fichas de '+charName(c)+' ('+have+'/'+need+')','#ff4444');return;}
+  sv.charShards[key]=have-need;
   sv.unlockedChars.push(key);saveSv();
   // Algunos personajes desbloquean automáticamente un balón exclusivo
   const exclusiveBall=BALL_SKINS.find(x=>x.charUnlock===key);
@@ -1812,20 +1834,17 @@ function unlockBall(id){
   const b=BALL_SKINS.find(x=>x.id===id);if(!b||b.unlocked){toast('Ya tienes esta skin');return;}
   if(b.eventOnly){toast('🔒 Skin exclusiva de eventos — disponible solo durante eventos especiales');return;}
   if(b.charUnlock){toast('🔒 Se desbloquea automáticamente al conseguir ese personaje');return;}
-  if(b.shardCost){
-    sv.ballShards=sv.ballShards||0;
-    if(sv.ballShards<b.shardCost){toast('Necesitas '+b.shardCost+' Fichas de Balón ('+sv.ballShards+'/'+b.shardCost+') — consíguelas en Cofres','#ff4444');return;}
-    sv.ballShards-=b.shardCost;b.unlocked=true;saveSv();toast('¡BALÓN '+b.name+' DESBLOQUEADO!','#ffe600');buildCustomize();buildCollectionBalls();
+  if(b.rarity){
+    sv.ballShards=sv.ballShards||{};
+    const need=BALL_RARITY_SHARD_COST[b.rarity];
+    const have=sv.ballShards[id]||0;
+    if(have<need){toast('Necesitas '+need+' Fichas '+b.name+' ('+have+'/'+need+') — consíguelas en Cofres','#ff4444');return;}
+    sv.ballShards[id]=have-need;b.unlocked=true;saveSv();toast('¡BALÓN '+b.name+' DESBLOQUEADO!','#ffe600');buildCustomize();buildCollectionBalls();
     return;
   }
   if(sv.coins<b.cost){toast('Sin monedas');return;}sv.coins-=b.cost;b.unlocked=true;saveSv();toast('¡BALÓN '+b.name+' DESBLOQUEADO!','#ffe600');buildCustomize();
 }
-function unlockCharSkin(ck,sid){
-  const c=CHARS[ck];if(!c)return;const s=c.skins.find(x=>x.id===sid);if(!s||s.unlocked){toast('Ya tienes esta skin');return;}
-  if(sv.coins<s.cost){toast('Sin monedas');return;}sv.coins-=s.cost;s.unlocked=true;saveSv();toast('¡SKIN '+s.name+' DESBLOQUEADA!','#ffe600');buildCustomize();
-}
 function equipBall(id){const b=BALL_SKINS.find(x=>x.id===id);if(!b||!b.unlocked){toast('Desbloquea primero');return;}selectedBallSkin=id;sv.equippedBall=id;saveSv();buildCustomize();}
-function equipCharSkin(ck,sid){const c=CHARS[ck];if(!c)return;const s=c.skins.find(x=>x.id===sid);if(!s||!s.unlocked){toast('Desbloquea primero');return;}sv.equippedSkins[ck]=sid;saveSv();buildCustomize();}
 
 // ════════════════════════════════════════════════════════════
 // SISTEMA DE COFRES — fuente de Fichas de Personaje y de Balón
@@ -1833,26 +1852,73 @@ function equipCharSkin(ck,sid){const c=CHARS[ck];if(!c)return;const s=c.skins.fi
 const CHEST_DAILY_MS=24*60*60*1000;
 
 // Cada cofre da 2 recompensas independientes, cada una sorteada de esta tabla
+// Balones elegibles para caer de cofres (excluye exclusivos de evento/personaje y ya desbloqueados)
+function _eligibleChestBalls(){
+  return BALL_SKINS.filter(b=>b.rarity&&!b.unlocked&&!b.eventOnly&&!b.charUnlock);
+}
+function _eligibleChestChars(){
+  return Object.entries(CHARS).filter(([k,c])=>c.cost>0&&c.rarity&&!sv.unlockedChars.includes(k)).map(([k,c])=>({key:k,...c}));
+}
+function _pickWeightedRarity(){
+  const r=Math.random();
+  if(r<0.50)return'common';
+  if(r<0.78)return'rare';
+  if(r<0.94)return'epic';
+  return'legendary';
+}
 function _rollChestReward(){
   const r=Math.random();
-  if(r<0.55) return {type:'common',amt:2};
-  if(r<0.77) return {type:'rare',amt:1};
-  if(r<0.83) return {type:'epic',amt:1};
-  return {type:'ball',amt:3};
+  if(r<0.55){
+    // Ficha de PERSONAJE: elige un personaje específico al azar, ponderado por su rareza
+    const pool=_eligibleChestChars();
+    if(!pool.length)return _rollBallReward();
+    const rarity=_pickWeightedRarity();
+    let candidates=pool.filter(c=>c.rarity===rarity);
+    if(!candidates.length)candidates=pool;
+    const char=candidates[Math.floor(Math.random()*candidates.length)];
+    const amt=char.rarity==='common'?3:char.rarity==='rare'?2:1;
+    return {kind:'char',charKey:char.key,amt};
+  }
+  return _rollBallReward();
+}
+function _rollBallReward(){
+  // Ficha de BALÓN: elige un balón específico al azar, ponderado por su rareza
+  const pool=_eligibleChestBalls();
+  if(!pool.length)return _rollCharFallback();
+  const rarity=_pickWeightedRarity();
+  let candidates=pool.filter(b=>b.rarity===rarity);
+  if(!candidates.length)candidates=pool;
+  const ball=candidates[Math.floor(Math.random()*candidates.length)];
+  const amt=ball.rarity==='common'?3:ball.rarity==='rare'?2:1;
+  return {kind:'ball',ballId:ball.id,amt};
+}
+function _rollCharFallback(){
+  // Si no quedan balones NI personajes pendientes, no hay nada que dar (caso límite, todo desbloqueado)
+  const pool=_eligibleChestChars();
+  if(!pool.length)return {kind:'none'};
+  const char=pool[Math.floor(Math.random()*pool.length)];
+  return {kind:'char',charKey:char.key,amt:2};
 }
 function openChest(){
   sv.chests=sv.chests||0;
   if(sv.chests<1){toast('No tienes cofres. ¡Gana partidas o reclama el diario!','#ff4444');return;}
   sv.chests--;
-  sv.shards=sv.shards||{common:0,rare:0,epic:0};sv.ballShards=sv.ballShards||0;
+  sv.charShards=sv.charShards||{};sv.ballShards=sv.ballShards||{};
   const rewards=[_rollChestReward(),_rollChestReward()];
-  const lines=[];
+  const resultItems=[];
   rewards.forEach(r=>{
-    if(r.type==='ball'){sv.ballShards+=r.amt;lines.push('⚪ +'+r.amt+' Fichas de Balón');}
-    else{sv.shards[r.type]=(sv.shards[r.type]||0)+r.amt;lines.push((r.type==='common'?'🟢':r.type==='rare'?'🔵':'🟣')+' +'+r.amt+' Fichas '+RARITY_LABEL[r.type]);}
+    if(r.kind==='ball'){
+      sv.ballShards[r.ballId]=(sv.ballShards[r.ballId]||0)+r.amt;
+      const b=BALL_SKINS.find(x=>x.id===r.ballId);
+      resultItems.push({img:b.imgUrl,emoji:b.emoji,label:'+'+r.amt+' '+b.name,col:b.col});
+    }else if(r.kind==='char'){
+      sv.charShards[r.charKey]=(sv.charShards[r.charKey]||0)+r.amt;
+      const c=CHARS[r.charKey];
+      resultItems.push({img:c.icon||c.img,emoji:'🧍',label:'+'+r.amt+' '+charName(c),col:RARITY_COLOR[c.rarity||'common']});
+    }
   });
   saveSv();
-  toast(lines.join(' · '),'#ffe600');
+  window._lastChestResults=resultItems;
   buildCollectionChests();
 }
 function claimDailyChest(){
@@ -1867,34 +1933,47 @@ function maybeDropWinChest(){
 }
 function buildCollectionChests(){
   const cont=$$('collChestsContent');if(!cont)return;
-  sv.shards=sv.shards||{common:0,rare:0,epic:0};sv.ballShards=sv.ballShards||0;sv.chests=sv.chests||0;
+  sv.charShards=sv.charShards||{};sv.ballShards=sv.ballShards||{};sv.chests=sv.chests||0;
   const msLeft=Math.max(0,CHEST_DAILY_MS-(Date.now()-(sv.lastDailyChestTs||0)));
   const canDaily=msLeft<=0;
   const hrs=Math.floor(msLeft/3600000),mins=Math.floor((msLeft%3600000)/60000);
+  const totalCharShards=Object.values(sv.charShards).reduce((a,b)=>a+b,0);
+  const totalBallShards=Object.values(sv.ballShards).reduce((a,b)=>a+b,0);
+
+  // Panel de resultados del último cofre abierto (si hay)
+  let resultsHtml='';
+  if(window._lastChestResults&&window._lastChestResults.length){
+    resultsHtml=`
+      <div style="width:100%;max-width:380px;background:linear-gradient(160deg,#1a2a10,#0a1408);border:2px solid #00ff8855;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;animation:fadeIn .3s;">
+        <div style="font-size:8px;color:#00ff88;text-align:center;letter-spacing:1px;">¡COFRE ABIERTO!</div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          ${window._lastChestResults.map(it=>`
+            <div style="background:#0a0a18;border:1px solid ${it.col||'#333'}55;border-radius:10px;padding:10px;text-align:center;min-width:90px;">
+              ${it.img?`<img src="${it.img}" style="width:36px;height:36px;object-fit:contain;margin:0 auto;display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                <div style="display:none;font-size:24px;">${it.emoji||'⚪'}</div>`
+                :`<div style="font-size:24px;">${it.emoji||'⚪'}</div>`}
+              <div style="font-size:5px;color:${it.col||'#aaa'};margin-top:6px;line-height:1.5;">${it.label}</div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }
+
   cont.innerHTML=`
     <div style="display:flex;flex-direction:column;gap:16px;align-items:center;">
+      ${resultsHtml}
       <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;width:100%;">
-        <div style="background:#0d0d1c;border:2px solid #8899aa44;border-radius:12px;padding:12px 18px;text-align:center;min-width:100px;">
-          <div style="font-size:20px;">🟢</div>
-          <div style="font-size:9px;color:#8899aa;margin-top:4px;">${sv.shards.common||0}</div>
-          <div style="font-size:5px;color:#556;margin-top:2px;">COMUNES</div>
+        <div style="background:#0d0d1c;border:2px solid #00c85344;border-radius:12px;padding:12px 18px;text-align:center;min-width:120px;">
+          <div style="font-size:20px;">🧍</div>
+          <div style="font-size:9px;color:#00c853;margin-top:4px;">${totalCharShards}</div>
+          <div style="font-size:5px;color:#556;margin-top:2px;">FICHAS DE PERSONAJE (total)</div>
         </div>
-        <div style="background:#0d0d1c;border:2px solid #3399ff44;border-radius:12px;padding:12px 18px;text-align:center;min-width:100px;">
-          <div style="font-size:20px;">🔵</div>
-          <div style="font-size:9px;color:#3399ff;margin-top:4px;">${sv.shards.rare||0}</div>
-          <div style="font-size:5px;color:#556;margin-top:2px;">RARAS</div>
-        </div>
-        <div style="background:#0d0d1c;border:2px solid #cc44ff44;border-radius:12px;padding:12px 18px;text-align:center;min-width:100px;">
-          <div style="font-size:20px;">🟣</div>
-          <div style="font-size:9px;color:#cc44ff;margin-top:4px;">${sv.shards.epic||0}</div>
-          <div style="font-size:5px;color:#556;margin-top:2px;">ÉPICAS</div>
-        </div>
-        <div style="background:#0d0d1c;border:2px solid #ffffff33;border-radius:12px;padding:12px 18px;text-align:center;min-width:100px;">
+        <div style="background:#0d0d1c;border:2px solid #ffffff33;border-radius:12px;padding:12px 18px;text-align:center;min-width:120px;">
           <div style="font-size:20px;">⚪</div>
-          <div style="font-size:9px;color:#ccc;margin-top:4px;">${sv.ballShards}</div>
-          <div style="font-size:5px;color:#556;margin-top:2px;">DE BALÓN</div>
+          <div style="font-size:9px;color:#ccc;margin-top:4px;">${totalBallShards}</div>
+          <div style="font-size:5px;color:#556;margin-top:2px;">FICHAS DE BALÓN (total)</div>
         </div>
       </div>
+      <div style="font-size:5px;color:#445;text-align:center;max-width:340px;">Cada personaje y cada balón tiene SU PROPIA ficha única — revisa el progreso específico en PERSONAJES y BALONES.</div>
 
       <div style="width:100%;max-width:340px;background:linear-gradient(160deg,#1a1230,#0a0818);border:2px solid #aa44dd55;border-radius:18px;padding:22px;text-align:center;box-shadow:0 8px 24px rgba(170,68,221,.15);">
         <div style="font-size:46px;">📦</div>
@@ -1911,7 +1990,8 @@ function buildCollectionChests(){
 
       <div style="font-size:5.5px;color:#445;text-align:center;line-height:1.8;max-width:340px;">
         Gana partidas para tener 20% de chance de un cofre extra.<br>
-        Usa las fichas en PERSONAJES y BALONES para desbloquear contenido.
+        Cada balón usa SU PROPIA ficha única — revisa su progreso en BALONES.<br>
+        Usa las fichas de personaje en PERSONAJES para desbloquear contenido.
       </div>
     </div>`;
 }
@@ -2029,7 +2109,7 @@ function showProfile(){
     {id:'rich',icon:'💰',name:'MILLONARIO',desc:'Acumula 500 monedas',check:()=>(sv.coins||0)>=500},
     {id:'story',icon:'📖',name:'NARRADOR',desc:'Completa el modo historia',check:()=>(sv.storyChapter||0)>=5},
     {id:'tournament',icon:'🥇',name:'CAMPEÓN DEL TORNEO',desc:'Gana un torneo',check:()=>(sv.wins||0)>0&&sv.gameMode==='tournament'},
-    {id:'collector',icon:'🎨',name:'ESTILO PROPIO',desc:'Equipa una skin alternativa',check:()=>Object.values(sv.equippedSkins||{}).some(id=>id!=='default')},
+    {id:'collector',icon:'🎨',name:'COLECCIONISTA',desc:'Desbloquea 5 balones distintos',check:()=>BALL_SKINS.filter(b=>b.unlocked).length>=5},
   ];
 
   const achList=document.createElement('div');
@@ -2240,7 +2320,7 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/6/64/Benson_shocked.png/revision/latest/scale-to-width-down/200',             // hurt
       'https://static.wikia.nocookie.net/regularshow/images/4/4e/Benson_yelling.png/revision/latest/scale-to-width-down/200'              // super
     ),
-    skins:[{id:'default',name:'DEFAULT',icon:'https://chibi.iitranq.co.uk/UFVGIzealxch.jpg',img:'https://chibi.iitranq.co.uk/PDP0FW4RvQXS.png',cost:0,unlocked:true,
+    skins:[{id:'default',name:'DEFAULT',icon:'🍬',img:'https://chibi.iitranq.co.uk/PDP0FW4RvQXS.png',cost:0,unlocked:true,
       sprites:mkSprites('https://chibi.iitranq.co.uk/PDP0FW4RvQXS.png','https://static.wikia.nocookie.net/regularshow/images/5/5e/Benson_walking.gif/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/b/b8/Benson_pointing.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/b/b2/Benson_angry.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/6/64/Benson_shocked.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/4/4e/Benson_yelling.png/revision/latest/scale-to-width-down/200')}],
     super:'RAGE BURST',superFn:'superBenson',leaderBuff:'BUFF: Rabia +30% más rápido'
   },
@@ -2257,7 +2337,7 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/1/1a/Pops_scared.png/revision/latest/scale-to-width-down/200',               // hurt
       'https://static.wikia.nocookie.net/regularshow/images/3/38/Pops_fighting.png/revision/latest/scale-to-width-down/200'               // super
     ),
-    skins:[{id:'default',name:'DEFAULT',icon:'https://chibi.iitranq.co.uk/8NpZCgh7d7K6.jpg',img:'https://static.wikia.nocookie.net/regularshow/images/9/9b/Pops_character.png/revision/latest/scale-to-width-down/200',cost:0,unlocked:true,
+    skins:[{id:'default',name:'DEFAULT',icon:'🎩',img:'https://static.wikia.nocookie.net/regularshow/images/9/9b/Pops_character.png/revision/latest/scale-to-width-down/200',cost:0,unlocked:true,
       sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/9/9b/Pops_character.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/e/e0/Pops_running.gif/revision/latest/scale-to-width-down/200')}],
     super:'JOLLY GOOD!',superFn:'superPops',leaderBuff:'BUFF: Curación +1 HP cada 2 turnos'
   },
@@ -2274,7 +2354,7 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/f/f1/Muscle_Man_sad.png/revision/latest/scale-to-width-down/200',             // hurt
       'https://static.wikia.nocookie.net/regularshow/images/1/18/Muscle_Man_angry.png/revision/latest/scale-to-width-down/200'            // super
     ),
-    skins:[{id:'default',name:'DEFAULT',icon:'https://chibi.iitranq.co.uk/VzbZsju4xq8W.jpg',img:'https://chibi.iitranq.co.uk/56i08W90Jwvv.png',cost:0,unlocked:true,
+    skins:[{id:'default',name:'DEFAULT',icon:'💚',img:'https://chibi.iitranq.co.uk/56i08W90Jwvv.png',cost:0,unlocked:true,
       sprites:mkSprites('https://chibi.iitranq.co.uk/56i08W90Jwvv.png','https://static.wikia.nocookie.net/regularshow/images/1/1f/Muscle_Man_running.gif/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/9/98/Muscle_Man_flexing.png/revision/latest/scale-to-width-down/200','https://chibi.iitranq.co.uk/56i08W90Jwvv.png','https://static.wikia.nocookie.net/regularshow/images/f/f1/Muscle_Man_sad.png/revision/latest/scale-to-width-down/200','https://static.wikia.nocookie.net/regularshow/images/1/18/Muscle_Man_angry.png/revision/latest/scale-to-width-down/200')}],
     super:'MY MOM!!',superFn:'superMuscle',leaderBuff:'BUFF: Tiros cargados +2 daño'
   },
@@ -2307,7 +2387,7 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/0/0d/Eileen_shocked.png/revision/latest/scale-to-width-down/200',             // hurt
       'https://static.wikia.nocookie.net/regularshow/images/f/fb/Eileen_character.png/revision/latest/scale-to-width-down/200'            // super
     ),
-    skins:[{id:'default',name:'DEFAULT',icon:'https://chibi.iitranq.co.uk/4QQ748IcdJUX.jpg',img:'https://static.wikia.nocookie.net/regularshow/images/f/fb/Eileen_character.png/revision/latest/scale-to-width-down/200',cost:0,unlocked:true,
+    skins:[{id:'default',name:'DEFAULT',icon:'🦔',img:'https://static.wikia.nocookie.net/regularshow/images/f/fb/Eileen_character.png/revision/latest/scale-to-width-down/200',cost:0,unlocked:true,
       sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/f/fb/Eileen_character.png/revision/latest/scale-to-width-down/200')}],
     super:'CRUSH STUDY',superFn:'superEileen',leaderBuff:'BUFF: +1 HP extra en curaciones'
   },
@@ -2458,11 +2538,12 @@ const CHARS={
   },
 };
 // ── Asignar rareza a cada personaje bloqueado, según su costo original ──
-// Común: hasta 160 · Raro: 161-220 · Épico: 221+ (jefes/legendarios)
+// Común: hasta 160 · Raro: 161-220 · Épico: 221-399 · Legendario: 400+ (jefes únicos)
 Object.entries(CHARS).forEach(([k,c])=>{
   if(!c.cost||c.cost<=0)return; // starters (Mordecai/Rigby/Skips) no necesitan rareza
-  c.rarity = c.cost<=160 ? 'common' : c.cost<=220 ? 'rare' : 'epic';
+  c.rarity = c.cost<=160 ? 'common' : c.cost<=220 ? 'rare' : c.cost<=399 ? 'epic' : 'legendary';
 });
+CHARS.antipops.rarity='legendary'; // jefe único — siempre legendario, sin importar el costo
 const ENEMY_DEFS=[
   {name:'Doom',col:'#ff2277',img:'https://static.wikia.nocookie.net/regularshow/images/0/04/Big_Terrible_Tooth.png/revision/latest/scale-to-width-down/200',sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/0/04/Big_Terrible_Tooth.png/revision/latest/scale-to-width-down/200'),super:'Tiro Maldito',superFn:'eSuperDoom'},
   {name:'Bane',col:'#ff6600',img:'https://static.wikia.nocookie.net/regularshow/images/1/15/Muscle_Bro.png/revision/latest/scale-to-width-down/200',sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/1/15/Muscle_Bro.png/revision/latest/scale-to-width-down/200'),super:'Aplastamiento',superFn:'eSuperBane'},
@@ -2472,6 +2553,11 @@ const ENEMY_DEFS=[
   {name:'Anti-Pops',col:'#440044',img:'https://static.wikia.nocookie.net/regularshow/images/5/5d/Anti-Pops.png/revision/latest/scale-to-width-down/200',sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/5/5d/Anti-Pops.png/revision/latest/scale-to-width-down/200'),super:'SINGULARIDAD',superFn:'eSuperAntiPops'},
   {name:'Skullface',col:'#222244',img:'https://static.wikia.nocookie.net/regularshow/images/b/b4/Skull_Punch.png/revision/latest/scale-to-width-down/200',sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/b/b4/Skull_Punch.png/revision/latest/scale-to-width-down/200'),super:'DEATH PUNCH',superFn:'eSuperSkullface'},
 ];
+// Fichas de balón ÚNICAS por balón (no comparten pool). Misma lógica invertida
+// que personajes: balones COMUNES son más fáciles de encontrar → piden MÁS;
+// LEGENDARIOS casi nunca caen → piden MENOS.
+const BALL_RARITY_SHARD_COST={common:12,rare:8,epic:5,legendary:3};
+
 const BALL_SKINS=[
   {id:'default',name:'BALÓN CLÁSICO',col:'#ff5500',glowCol:'#ffea00',cost:0,unlocked:true,emoji:'🔴',imgUrl:'https://chibi.iitranq.co.uk/Kph7iBuNx5qy.png'},
   {id:'red',name:'BALÓN ROJO',col:'#ff3344',glowCol:'#ff8866',cost:40,unlocked:false,emoji:'🔴',imgUrl:'https://chibi.iitranq.co.uk/Ziuk0r3EI3ES.png'},
@@ -2479,19 +2565,18 @@ const BALL_SKINS=[
   {id:'ice',name:'BALÓN DE HIELO',col:'#66ddff',glowCol:'#ffffff',cost:90,unlocked:false,emoji:'❄️',imgUrl:'https://chibi.iitranq.co.uk/40259UCzTYAj.png'},
   {id:'draw',name:'BALÓN DIBUJADO',col:'#ffffff',glowCol:'#ffddaa',cost:90,unlocked:false,emoji:'✏️',imgUrl:'https://chibi.iitranq.co.uk/e4ezrWhqAITn.png'},
   {id:'tech',name:'BALÓN TECH',col:'#33ff99',glowCol:'#00ffcc',cost:0,unlocked:true,emoji:'⚙️',imgUrl:'https://chibi.iitranq.co.uk/hI5S3PUuMBgX.png'}, // gratis: recolor menor, no merece costo
-  // ── A partir de aquí: desbloqueo por FICHAS DE BALÓN (cofres), no monedas ──
-  // 'pixel' ahora usa la imagen 8-bit real (más pixelada, ya se distingue del clásico)
-  {id:'pixel',name:'BALÓN 8-BIT',col:'#ffaa00',glowCol:'#ffee44',cost:0,shardCost:8,unlocked:false,emoji:'🟧',imgUrl:'https://chibi.iitranq.co.uk/VIMXaEIu68ob.png'},
-  {id:'cyber',name:'BALÓN CYBER',col:'#00ffff',glowCol:'#00aaff',cost:0,shardCost:10,unlocked:false,emoji:'🔵',imgUrl:'https://chibi.iitranq.co.uk/C3iNbxHf9Rui.png'},
-  {id:'electroshock',name:'ELECTROSHOCK',col:'#ffff00',glowCol:'#aaffff',cost:0,shardCost:14,unlocked:false,emoji:'⚡',imgUrl:'https://chibi.iitranq.co.uk/OLrJ1zWfbGjm.png'},
-  {id:'mint',name:'BALÓN MENTA',col:'#88ffcc',glowCol:'#ccffee',cost:0,shardCost:14,unlocked:false,emoji:'🍃',imgUrl:'https://chibi.iitranq.co.uk/yc96AbWvYu1m.png'},
-  {id:'vintage',name:'BALÓN VINTAGE',col:'#cc9966',glowCol:'#ffddaa',cost:0,shardCost:16,unlocked:false,emoji:'📻',imgUrl:'https://chibi.iitranq.co.uk/8lZuNiCgbz2X.png'},
-  {id:'lowpoly',name:'BALÓN LOW POLY',col:'#88ccff',glowCol:'#aaffee',cost:0,shardCost:12,unlocked:false,emoji:'🔷',imgUrl:'https://chibi.iitranq.co.uk/3aDSYMcyP9ao.png'},
-  {id:'ghost',name:'BALÓN FANTASMA',col:'#aaddff',glowCol:'#ffffff',cost:0,shardCost:14,unlocked:false,emoji:'👻',imgUrl:'https://chibi.iitranq.co.uk/CQolODtxKOAU.png'},
-  {id:'galaxy',name:'BALÓN GALAXIA',col:'#cc44ff',glowCol:'#ff44cc',cost:0,shardCost:18,unlocked:false,emoji:'🟣',imgUrl:'https://chibi.iitranq.co.uk/zorf4yXz2q7E.png'},
-  {id:'gold',name:'BALÓN ORO',col:'#ffd700',glowCol:'#ffaa00',cost:0,shardCost:25,unlocked:false,emoji:'🟡',imgUrl:'https://chibi.iitranq.co.uk/oItH0GUhIOH8.png'},
-  {id:'diamond',name:'BALÓN DIAMANTE',col:'#a8e4ff',glowCol:'#ffffff',cost:0,shardCost:35,unlocked:false,emoji:'💎',imgUrl:'https://chibi.iitranq.co.uk/eRLGgfyMgTbc.png'},
-  {id:'chaosphere',name:'CHAOSPHERE',col:'#cc44ff',glowCol:'#ff00ff',cost:0,shardCost:70,unlocked:false,emoji:'🌀',imgUrl:'https://chibi.iitranq.co.uk/XhP12zwmJBlh.png'},
+  // ── A partir de aquí: desbloqueo por FICHAS ÚNICAS de cada balón (cofres) ──
+  {id:'pixel',name:'BALÓN 8-BIT',col:'#ffaa00',glowCol:'#ffee44',rarity:'common',unlocked:false,emoji:'🟧',imgUrl:'https://chibi.iitranq.co.uk/VIMXaEIu68ob.png'},
+  {id:'cyber',name:'BALÓN CYBER',col:'#00ffff',glowCol:'#00aaff',rarity:'common',unlocked:false,emoji:'🔵',imgUrl:'https://chibi.iitranq.co.uk/C3iNbxHf9Rui.png'},
+  {id:'electroshock',name:'ELECTROSHOCK',col:'#ffff00',glowCol:'#aaffff',rarity:'common',unlocked:false,emoji:'⚡',imgUrl:'https://chibi.iitranq.co.uk/OLrJ1zWfbGjm.png'},
+  {id:'mint',name:'BALÓN MENTA',col:'#88ffcc',glowCol:'#ccffee',rarity:'common',unlocked:false,emoji:'🍃',imgUrl:'https://chibi.iitranq.co.uk/yc96AbWvYu1m.png'},
+  {id:'lowpoly',name:'BALÓN LOW POLY',col:'#88ccff',glowCol:'#aaffee',rarity:'common',unlocked:false,emoji:'🔷',imgUrl:'https://chibi.iitranq.co.uk/3aDSYMcyP9ao.png'},
+  {id:'ghost',name:'BALÓN FANTASMA',col:'#aaddff',glowCol:'#ffffff',rarity:'common',unlocked:false,emoji:'👻',imgUrl:'https://chibi.iitranq.co.uk/CQolODtxKOAU.png'},
+  {id:'vintage',name:'BALÓN VINTAGE',col:'#cc9966',glowCol:'#ffddaa',rarity:'rare',unlocked:false,emoji:'📻',imgUrl:'https://chibi.iitranq.co.uk/8lZuNiCgbz2X.png'},
+  {id:'galaxy',name:'BALÓN GALAXIA',col:'#cc44ff',glowCol:'#ff44cc',rarity:'rare',unlocked:false,emoji:'🟣',imgUrl:'https://chibi.iitranq.co.uk/zorf4yXz2q7E.png'},
+  {id:'gold',name:'BALÓN ORO',col:'#ffd700',glowCol:'#ffaa00',rarity:'epic',unlocked:false,emoji:'🟡',imgUrl:'https://chibi.iitranq.co.uk/oItH0GUhIOH8.png'},
+  {id:'diamond',name:'BALÓN DIAMANTE',col:'#a8e4ff',glowCol:'#ffffff',rarity:'epic',unlocked:false,emoji:'💎',imgUrl:'https://chibi.iitranq.co.uk/eRLGgfyMgTbc.png'},
+  {id:'chaosphere',name:'CHAOSPHERE',col:'#cc44ff',glowCol:'#ff00ff',rarity:'legendary',unlocked:false,emoji:'🌀',imgUrl:'https://chibi.iitranq.co.uk/XhP12zwmJBlh.png'},
   // ── Exclusivas: se desbloquean automáticamente con un personaje, no se compran ──
   {id:'antiball',name:'ANTI-BALL',col:'#cc00ff',glowCol:'#440044',cost:0,unlocked:false,emoji:'🌑',imgUrl:'https://chibi.iitranq.co.uk/Vdz2MsjazEQc.png',charUnlock:'antipops'},
   {id:'popshead',name:'CABEZA DE POPS',col:'#ffe600',glowCol:'#fff7aa',cost:0,unlocked:false,emoji:'👑',imgUrl:'https://chibi.iitranq.co.uk/gD6MysKb4IlC.png',eventOnly:true},
@@ -2666,17 +2751,9 @@ function addCharXp(k,amt){
 // Returns the icon URL for displaying in the grid squares.
 // Uses c.icon if available, otherwise falls back to the skin img.
 function getIconSrc(k){
-  const c=CHARS[k];
-  // Prioridad: icono/imagen de la SKIN EQUIPADA (le da un toque único al equipar)
-  // → icono base del personaje → imagen base del personaje.
-  const skinId=sv.equippedSkins[k]||(c.skins&&c.skins[0]&&c.skins[0].id);
-  const skin=c.skins?c.skins.find(s=>s.id===skinId):null;
-  if(skin){
-    const skinIconSrc=(skin.icon&&skin.icon.startsWith('http'))?skin.icon:skin.img;
-    if(skinIconSrc)return skinIconSrc;
-  }
-  if(c.icon)return c.icon;
-  return c.img||'';
+  // Sistema de skins eliminado: cada personaje usa directamente su propio icon/img.
+  const c=CHARS[k];if(!c)return'';
+  return c.icon||c.img||'';
 }
 
 // ── Fallback en cascada para íconos de personaje rotos ──
@@ -2707,7 +2784,14 @@ function makeCharIcon(k,mode){
   if(isSel&&!isLeader)inner+=`<div class="iconSelNum">${[...selectedChars].indexOf(k)+1}</div>`;
   if(isSel&&isLeader)inner+=`<div class="iconLeadStar">⭐</div>`;
   inner+=`<div class="iconLvBadge">LV${lv}</div>`;
-  if(!isUnlocked)inner+=`<div class="iconLockBadge"><span>🔒</span><span style="font-size:6px;color:${c.unlock===2?'var(--PU)':'var(--Y)'};margin-top:3px;">${c.unlock===2?'🎫':'🪙'}${c.cost}</span></div>`;
+  if(c.cost>0&&c.rarity){
+    const rcol=RARITY_COLOR[c.rarity];
+    inner+=`<div style="position:absolute;top:2px;left:2px;width:8px;height:8px;border-radius:50%;background:${rcol};box-shadow:0 0 4px ${rcol},0 0 1px #000;z-index:3;" title="${RARITY_LABEL[c.rarity]}"></div>`;
+  }
+  if(!isUnlocked&&c.cost>0){
+    const rarity=c.rarity||'common';const rcol=RARITY_COLOR[rarity];
+    inner+=`<div class="iconLockBadge"><span>🔒</span><span style="font-size:5px;color:${rcol};margin-top:3px;letter-spacing:.3px;">${RARITY_LABEL[rarity]}</span></div>`;
+  }
   d.innerHTML=inner;
   d.onclick=()=>{
     if(!isUnlocked){openCardPopup(k,'roster');}
@@ -2724,9 +2808,24 @@ function openCardPopup(k,mode){
   // Card popup shows the dedicated icon (square)
   const popupImgSrc=getIconSrc(k);
   $$('cpInner').style.borderColor='#00c853';$$('cpInner').style.boxShadow='0 0 28px #00c85344';
-  $$('cpImg').src=popupImgSrc;$$('cpImg').style.borderColor='#00c853';
+  const cpImgEl=$$('cpImg');
+  cpImgEl.dataset.fbStep='';cpImgEl.style.display='';
+  // Quitar cualquier fallback emoji insertado en una apertura anterior del popup
+  const prevFb=cpImgEl.nextElementSibling;
+  if(prevFb&&prevFb.classList&&prevFb.classList.contains('charIconFallback'))prevFb.remove();
+  cpImgEl.src=popupImgSrc;cpImgEl.style.borderColor='#00c853';
+  cpImgEl.onerror=function(){_charIconErr(cpImgEl,k);};
   $$('cpName').textContent=charName(c).toUpperCase();$$('cpName').style.color='#00c853';
   $$('cpRole').textContent=c.role;$$('cpLv').textContent=lv>=MAX_CHAR_LEVEL?'MAX LV':'LV '+lv;
+  // Rareza: visible siempre (antes y después de desbloquear), solo para no-starters
+  const cpRarityEl=$$('cpRarity');
+  if(c.cost>0&&c.rarity){
+    cpRarityEl.style.display='block';
+    cpRarityEl.style.color=RARITY_COLOR[c.rarity];
+    cpRarityEl.textContent='★ '+RARITY_LABEL[c.rarity];
+  }else{
+    cpRarityEl.style.display='none';
+  }
   $$('cpXpFill').style.width=(lv>=MAX_CHAR_LEVEL?100:Math.round(xp/xpMax*100))+'%';
   $$('cpXpTxt').textContent=lv>=MAX_CHAR_LEVEL?'MAX':`${xp}/${xpMax} XP`;
   const bonus=lvBonus(k);
@@ -2743,15 +2842,16 @@ function openCardPopup(k,mode){
   let btns='';
   if(!isUnlocked){
     if(c.cost>0){
-      const rarity=c.rarity||'common';const need=RARITY_SHARD_COST[rarity];
-      const have=(sv.shards&&sv.shards[rarity])||0;const can=have>=need;
+      const rarity=c.rarity||'common';const need=CHAR_RARITY_SHARD_COST[rarity];
+      sv.charShards=sv.charShards||{};
+      const have=sv.charShards[k]||0;const can=have>=need;
       const rcol=RARITY_COLOR[rarity];
       btns+=`<div style="width:100%;display:flex;flex-direction:column;gap:6px;">
         <div style="font-size:6px;color:${rcol};letter-spacing:1px;">RAREZA: ${RARITY_LABEL[rarity]}</div>
         <div style="width:100%;height:8px;background:#1a1a2a;border-radius:5px;overflow:hidden;">
           <div style="height:100%;width:${Math.min(100,have/need*100)}%;background:${rcol};"></div>
         </div>
-        <div style="font-size:6px;color:#889;">${have}/${need} Fichas ${RARITY_LABEL[rarity]}</div>
+        <div style="font-size:6px;color:#889;">${have}/${need} Fichas de ${charName(c)}</div>
         ${can
           ?`<button class="uBtn" onclick="unlockChar('${k}');closeCardPopup();" style="border-color:var(--Y);color:var(--Y);">DESBLOQUEAR</button>`
           :`<button class="uBtn" onclick="closeCardPopup();show('sRoster');switchCollTab('chests');" style="border-color:${rcol};color:${rcol};">📦 IR A COFRES</button>`}
@@ -3022,57 +3122,17 @@ function buildCustomize(){
     card.className='ball-card'+(active?' equipped':'')+(b.unlocked?'':' locked');
     card.style.setProperty('--ball-col',b.col);
     card.style.borderColor=active?b.col:'#1a1a2a';
-    let statusHtml='';
-    if(!b.unlocked) statusHtml=b.eventOnly?`<div class="ball-card-status price" style="background:linear-gradient(90deg,#ffe600,#ff8800);color:#000;">EVENTO</div>`:b.charUnlock?`<div class="ball-card-status price" style="background:rgba(204,0,255,.15);border-color:rgba(204,0,255,.4);color:#cc66ff;">EXCLUSIVA</div>`:(b.shardCost?`<div class="ball-card-status price" style="background:rgba(170,68,221,.12);border-color:rgba(170,68,221,.3);color:#cc88ff;">⚪ ${b.shardCost}</div>`:`<div class="ball-card-status price">🪙 ${b.cost}</div>`);
-    else if(active)  statusHtml=`<div class="ball-card-status active">✓ EQUIPADO</div>`;
-    else             statusHtml=`<div class="ball-card-status owned">EQUIPAR</div>`;
     card.innerHTML=`
       <img class="ball-card-img" src="${b.imgUrl||''}" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex';" alt="">
       <div class="img-fallback">${b.emoji||'⚪'}</div>
       ${!b.unlocked?`<div class="ball-card-lock"><span style="font-size:20px;">🔒</span></div>`:''}
       <div class="ball-card-name" style="color:${b.col};">${b.name}</div>
-      ${statusHtml}`;
+      ${_ballStatusHtml(b,active)}`;
     card.onclick=()=>{b.unlocked?equipBall(b.id):unlockBall(b.id);};
     bRow.appendChild(card);
   });
   bSec.appendChild(bRow);cc.appendChild(bSec);
-
-  // ── PERSONAJES ──
-  Object.entries(CHARS).forEach(([ck,c])=>{
-    if(!sv.unlockedChars.includes(ck)||c.skins.length<=1)return;
-    const sec=document.createElement('div');
-    const iconSrc=getIconSrc(ck);
-    sec.innerHTML=`<div class="skins-section-title char-title">
-      <img src="${iconSrc}" style="width:22px;height:22px;border-radius:5px;object-fit:cover;border:1px solid #00c85333;" onerror="this.style.display='none'">
-      ${charName(c).toUpperCase()} — SKINS
-    </div>`;
-    const row=document.createElement('div');row.className='char-skin-grid';
-    c.skins.forEach(s=>{
-      const equipped=(sv.equippedSkins[ck]||'default')===s.id;
-      const card=document.createElement('div');
-      card.className='char-skin-card'+(equipped?' equipped-skin':'');
-      const skinIconSrc=(s.icon&&s.icon.startsWith('http'))?s.icon:s.img;
-      let footerColor=equipped?'#00c853':s.unlocked?'#4a6a5a':'#444';
-      let footerLabel=s.unlocked?(equipped?'✓ '+s.name:s.name):'🔒 '+s.name;
-      card.innerHTML=`
-        <div class="char-skin-img-wrap">
-          <img class="char-skin-img${s.unlocked?'':' locked'}" src="${skinIconSrc}"
-            onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex';" alt="">
-          <div class="char-skin-fallback" style="position:absolute;inset:0;aspect-ratio:auto;height:100%;">🧍</div>
-          ${equipped?`<div class="char-skin-badge">ON</div>`:''}
-          ${!s.unlocked?`<div class="char-skin-lock">
-            <span style="font-size:20px;">🔒</span>
-            <span style="font-size:5px;color:var(--Y);font-family:'Press Start 2P',monospace;">🪙${s.cost}</span>
-          </div>`:''}
-        </div>
-        <div class="char-skin-footer">
-          <div class="char-skin-label" style="color:${footerColor};">${footerLabel}</div>
-        </div>`;
-      card.onclick=()=>s.unlocked?equipCharSkin(ck,s.id):unlockCharSkin(ck,s.id);
-      row.appendChild(card);
-    });
-    sec.appendChild(row);cc.appendChild(sec);
-  });
+  // (Sistema de skins por personaje eliminado: cada personaje usa su propio icon/img directamente)
 }
 
 // ═══════════════════ CANVAS ═══════════════════
