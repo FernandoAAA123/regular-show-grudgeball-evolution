@@ -1679,7 +1679,15 @@ let sv={
 // Las fichas LEGENDARIAS son muy raras de encontrar → se necesitan MENOS.
 // Umbral de fichas ÚNICAS por personaje (cada personaje tiene su propia ficha,
 // no un pool compartido). Lógica invertida: común = más fácil de encontrar = pide más.
-const CHAR_RARITY_SHARD_COST={common:15,rare:10,epic:6,legendary:3};
+const CHAR_RARITY_SHARD_COST={common:60,rare:45,epic:30,legendary:15};
+// Costo de "mejora" con fichas sobrantes + monedas (una vez ya desbloqueado el personaje).
+// Cada mejora otorga XP directa. Legendarios cuestan más monedas pero menos fichas (son escasas).
+const CHAR_UPGRADE_BOOST={
+  common:{shards:10,coins:50,xp:25},
+  rare:{shards:8,coins:70,xp:25},
+  epic:{shards:6,coins:100,xp:25},
+  legendary:{shards:4,coins:150,xp:25},
+};
 const RARITY_LABEL={common:'COMÚN',rare:'RARO',epic:'ÉPICO',legendary:'LEGENDARIO'};
 const RARITY_COLOR={common:'#8899aa',rare:'#3399ff',epic:'#cc44ff',legendary:'#ffaa00'};
 function loadSv(){
@@ -1830,6 +1838,19 @@ function unlockChar(key){
   }
   buildRoster();
 }
+function upgradeCharWithShards(key){
+  const c=CHARS[key];if(!c||!sv.unlockedChars.includes(key)||!c.rarity)return;
+  const lv=charLevel(key);if(lv>=MAX_CHAR_LEVEL){toast(charName(c)+' ya está al nivel máximo','#ffe600');return;}
+  const boost=CHAR_UPGRADE_BOOST[c.rarity];
+  sv.charShards=sv.charShards||{};
+  const haveShards=sv.charShards[key]||0;
+  if(haveShards<boost.shards){toast('Necesitas '+boost.shards+' Fichas de '+charName(c)+' ('+haveShards+'/'+boost.shards+')','#ff4444');return;}
+  if(sv.coins<boost.coins){toast('Necesitas 🪙'+boost.coins+' monedas','#ff4444');return;}
+  sv.charShards[key]=haveShards-boost.shards;sv.coins-=boost.coins;
+  addCharXp(key,boost.xp);saveSv();
+  toast('¡'+charName(c)+' +'+boost.xp+' XP!','#00ff88');
+  openCardPopup(key,'roster');
+}
 function unlockBall(id){
   const b=BALL_SKINS.find(x=>x.id===id);if(!b||b.unlocked){toast('Ya tienes esta skin');return;}
   if(b.eventOnly){toast('🔒 Skin exclusiva de eventos — disponible solo durante eventos especiales');return;}
@@ -1857,13 +1878,16 @@ function _eligibleChestBalls(){
   return BALL_SKINS.filter(b=>b.rarity&&!b.unlocked&&!b.eventOnly&&!b.charUnlock);
 }
 function _eligibleChestChars(){
-  return Object.entries(CHARS).filter(([k,c])=>c.cost>0&&c.rarity&&!sv.unlockedChars.includes(k)).map(([k,c])=>({key:k,...c}));
+  // Cualquier personaje con rareza puede dar fichas — incluso ya desbloqueado,
+  // porque las fichas sobrantes ahora sirven para MEJORARLO (fichas + monedas).
+  return Object.entries(CHARS).filter(([k,c])=>c.rarity).map(([k,c])=>({key:k,...c}));
 }
 function _pickWeightedRarity(){
+  // Ahora es más fácil sacar fichas comunes/raras (mayor probabilidad)
   const r=Math.random();
-  if(r<0.50)return'common';
-  if(r<0.78)return'rare';
-  if(r<0.94)return'epic';
+  if(r<0.58)return'common';
+  if(r<0.85)return'rare';
+  if(r<0.96)return'epic';
   return'legendary';
 }
 function _rollChestReward(){
@@ -1876,7 +1900,8 @@ function _rollChestReward(){
     let candidates=pool.filter(c=>c.rarity===rarity);
     if(!candidates.length)candidates=pool;
     const char=candidates[Math.floor(Math.random()*candidates.length)];
-    const amt=char.rarity==='common'?3:char.rarity==='rare'?2:1;
+    // Comunes y raras dan más cantidad ahora que cuestan más desbloquear
+    const amt=char.rarity==='common'?6:char.rarity==='rare'?4:char.rarity==='epic'?2:1;
     return {kind:'char',charKey:char.key,amt};
   }
   return _rollBallReward();
@@ -1897,7 +1922,7 @@ function _rollCharFallback(){
   const pool=_eligibleChestChars();
   if(!pool.length)return {kind:'none'};
   const char=pool[Math.floor(Math.random()*pool.length)];
-  return {kind:'char',charKey:char.key,amt:2};
+  return {kind:'char',charKey:char.key,amt:6};
 }
 function openChest(){
   sv.chests=sv.chests||0;
@@ -2537,13 +2562,20 @@ const CHARS={
     super:'EAGLE DIVE',superFn:'superAudrey',leaderBuff:'BUFF: Primer tiro sin posibilidad de contra'
   },
 };
-// ── Asignar rareza a cada personaje bloqueado, según su costo original ──
+// ── Asignar rareza a cada personaje, según su costo original ──
 // Común: hasta 160 · Raro: 161-220 · Épico: 221-399 · Legendario: 400+ (jefes únicos)
 Object.entries(CHARS).forEach(([k,c])=>{
-  if(!c.cost||c.cost<=0)return; // starters (Mordecai/Rigby/Skips) no necesitan rareza
+  if(!c.cost||c.cost<=0)return; // starters: se asignan explícitamente abajo
   c.rarity = c.cost<=160 ? 'common' : c.cost<=220 ? 'rare' : c.cost<=399 ? 'epic' : 'legendary';
 });
 CHARS.antipops.rarity='legendary'; // jefe único — siempre legendario, sin importar el costo
+// Starters: aunque ya están desbloqueados de inicio, también tienen rareza
+// (así sus fichas extra de cofres sirven para mejorarlos con fichas+monedas)
+CHARS.mordecai.rarity='common';
+CHARS.rigby.rarity='common';
+CHARS.skips.rarity='common';
+// Mordecai Futuro: aunque su costo cae en el rango "raro", se quiere como común
+CHARS.mordecai_future.rarity='common';
 const ENEMY_DEFS=[
   {name:'Doom',col:'#ff2277',img:'https://static.wikia.nocookie.net/regularshow/images/0/04/Big_Terrible_Tooth.png/revision/latest/scale-to-width-down/200',sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/0/04/Big_Terrible_Tooth.png/revision/latest/scale-to-width-down/200'),super:'Tiro Maldito',superFn:'eSuperDoom'},
   {name:'Bane',col:'#ff6600',img:'https://static.wikia.nocookie.net/regularshow/images/1/15/Muscle_Bro.png/revision/latest/scale-to-width-down/200',sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/1/15/Muscle_Bro.png/revision/latest/scale-to-width-down/200'),super:'Aplastamiento',superFn:'eSuperBane'},
@@ -2559,12 +2591,12 @@ const ENEMY_DEFS=[
 const BALL_RARITY_SHARD_COST={common:12,rare:8,epic:5,legendary:3};
 
 const BALL_SKINS=[
-  {id:'default',name:'BALÓN CLÁSICO',col:'#ff5500',glowCol:'#ffea00',cost:0,unlocked:true,emoji:'🔴',imgUrl:'https://chibi.iitranq.co.uk/Kph7iBuNx5qy.png'},
-  {id:'red',name:'BALÓN ROJO',col:'#ff3344',glowCol:'#ff8866',cost:40,unlocked:false,emoji:'🔴',imgUrl:'https://chibi.iitranq.co.uk/Ziuk0r3EI3ES.png'},
-  {id:'fire',name:'BALÓN DE FUEGO',col:'#ff2200',glowCol:'#ff8800',cost:80,unlocked:false,emoji:'🔥',imgUrl:'https://chibi.iitranq.co.uk/mNfxjAAJZ7FS.png'},
-  {id:'ice',name:'BALÓN DE HIELO',col:'#66ddff',glowCol:'#ffffff',cost:90,unlocked:false,emoji:'❄️',imgUrl:'https://chibi.iitranq.co.uk/40259UCzTYAj.png'},
-  {id:'draw',name:'BALÓN DIBUJADO',col:'#ffffff',glowCol:'#ffddaa',cost:90,unlocked:false,emoji:'✏️',imgUrl:'https://chibi.iitranq.co.uk/e4ezrWhqAITn.png'},
-  {id:'tech',name:'BALÓN TECH',col:'#33ff99',glowCol:'#00ffcc',cost:0,unlocked:true,emoji:'⚙️',imgUrl:'https://chibi.iitranq.co.uk/hI5S3PUuMBgX.png'}, // gratis: recolor menor, no merece costo
+  {id:'default',name:'BALÓN CLÁSICO',col:'#ff5500',glowCol:'#ffea00',rarity:'common',unlocked:true,emoji:'🔴',imgUrl:'https://chibi.iitranq.co.uk/Kph7iBuNx5qy.png'},
+  {id:'red',name:'BALÓN ROJO',col:'#ff3344',glowCol:'#ff8866',rarity:'common',unlocked:false,emoji:'🔴',imgUrl:'https://chibi.iitranq.co.uk/Ziuk0r3EI3ES.png'},
+  {id:'fire',name:'BALÓN DE FUEGO',col:'#ff2200',glowCol:'#ff8800',rarity:'common',unlocked:false,emoji:'🔥',imgUrl:'https://chibi.iitranq.co.uk/mNfxjAAJZ7FS.png'},
+  {id:'ice',name:'BALÓN DE HIELO',col:'#66ddff',glowCol:'#ffffff',rarity:'common',unlocked:false,emoji:'❄️',imgUrl:'https://chibi.iitranq.co.uk/40259UCzTYAj.png'},
+  {id:'draw',name:'BALÓN DIBUJADO',col:'#ffffff',glowCol:'#ffddaa',rarity:'common',unlocked:false,emoji:'✏️',imgUrl:'https://chibi.iitranq.co.uk/e4ezrWhqAITn.png'},
+  {id:'tech',name:'BALÓN TECH',col:'#33ff99',glowCol:'#00ffcc',rarity:'common',unlocked:true,emoji:'⚙️',imgUrl:'https://chibi.iitranq.co.uk/hI5S3PUuMBgX.png'}, // gratis: recolor menor, no merece costo
   // ── A partir de aquí: desbloqueo por FICHAS ÚNICAS de cada balón (cofres) ──
   {id:'pixel',name:'BALÓN 8-BIT',col:'#ffaa00',glowCol:'#ffee44',rarity:'common',unlocked:false,emoji:'🟧',imgUrl:'https://chibi.iitranq.co.uk/VIMXaEIu68ob.png'},
   {id:'cyber',name:'BALÓN CYBER',col:'#00ffff',glowCol:'#00aaff',rarity:'common',unlocked:false,emoji:'🔵',imgUrl:'https://chibi.iitranq.co.uk/C3iNbxHf9Rui.png'},
@@ -2578,8 +2610,8 @@ const BALL_SKINS=[
   {id:'diamond',name:'BALÓN DIAMANTE',col:'#a8e4ff',glowCol:'#ffffff',rarity:'epic',unlocked:false,emoji:'💎',imgUrl:'https://chibi.iitranq.co.uk/eRLGgfyMgTbc.png'},
   {id:'chaosphere',name:'CHAOSPHERE',col:'#cc44ff',glowCol:'#ff00ff',rarity:'legendary',unlocked:false,emoji:'🌀',imgUrl:'https://chibi.iitranq.co.uk/XhP12zwmJBlh.png'},
   // ── Exclusivas: se desbloquean automáticamente con un personaje, no se compran ──
-  {id:'antiball',name:'ANTI-BALL',col:'#cc00ff',glowCol:'#440044',cost:0,unlocked:false,emoji:'🌑',imgUrl:'https://chibi.iitranq.co.uk/Vdz2MsjazEQc.png',charUnlock:'antipops'},
-  {id:'popshead',name:'CABEZA DE POPS',col:'#ffe600',glowCol:'#fff7aa',cost:0,unlocked:false,emoji:'👑',imgUrl:'https://chibi.iitranq.co.uk/gD6MysKb4IlC.png',eventOnly:true},
+  {id:'antiball',name:'ANTI-BALL',col:'#cc00ff',glowCol:'#440044',rarity:'legendary',unlocked:false,emoji:'🌑',imgUrl:'https://chibi.iitranq.co.uk/Vdz2MsjazEQc.png',charUnlock:'antipops'},
+  {id:'popshead',name:'CABEZA DE POPS',col:'#ffe600',glowCol:'#fff7aa',rarity:'legendary',unlocked:false,emoji:'👑',imgUrl:'https://chibi.iitranq.co.uk/gD6MysKb4IlC.png',eventOnly:true},
 ];
 let selectedBallSkin='default';
 const POWERUPS=[
@@ -2817,9 +2849,9 @@ function openCardPopup(k,mode){
   cpImgEl.onerror=function(){_charIconErr(cpImgEl,k);};
   $$('cpName').textContent=charName(c).toUpperCase();$$('cpName').style.color='#00c853';
   $$('cpRole').textContent=c.role;$$('cpLv').textContent=lv>=MAX_CHAR_LEVEL?'MAX LV':'LV '+lv;
-  // Rareza: visible siempre (antes y después de desbloquear), solo para no-starters
+  // Rareza: visible siempre (antes y después de desbloquear) para cualquier personaje con rareza asignada
   const cpRarityEl=$$('cpRarity');
-  if(c.cost>0&&c.rarity){
+  if(c.rarity){
     cpRarityEl.style.display='block';
     cpRarityEl.style.color=RARITY_COLOR[c.rarity];
     cpRarityEl.textContent='★ '+RARITY_LABEL[c.rarity];
