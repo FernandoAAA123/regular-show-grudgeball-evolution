@@ -154,7 +154,9 @@ function _fbTryRestoreBap() {
       return;
     }
   } catch(e) {}
-  if (window._fbShowAuthGate) window._fbShowAuthGate();
+  // Ya no se muestra automáticamente al iniciar — el modal de login/registro
+  // ahora se abre manualmente desde Settings (sección CUENTA), así el jugador
+  // siempre puede volver a intentarlo cuando quiera, sin quedar bloqueado.
 }
 
 // ── Login con Google (cuenta real propia de Grudgeball) ───────
@@ -261,7 +263,6 @@ window._fbLogout = async function() {
       try { localStorage.removeItem('gb_bapSession'); } catch(e) {}
       _fbMode = null; window._fbAuthMode = null; _fbUid = null; window._fbUid = null;
       _fbSetStatus('Sin conexión (inicia sesión)');
-      if (window._fbShowAuthGate) window._fbShowAuthGate();
     } else if (_fbAuth) {
       await signOut(_fbAuth);
     }
@@ -599,7 +600,7 @@ body.mode-pc .mTitleImg{max-width:min(540px,55vw);max-height:28vh;margin-top:cla
 .ball-card:hover .ball-card-img{transform:scale(1.08);}
 .ball-card.locked .ball-card-img{filter:brightness(.3) grayscale(.85);}
 .ball-card-name{font-size:5.5px;font-family:'Press Start 2P',monospace;padding:2px 6px 6px;line-height:1.7;letter-spacing:.3px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8);}
-.ball-card-status{font-size:5px;font-family:'Press Start 2P',monospace;padding:4px 9px;border-radius:5px;display:inline-block;}
+.ball-card-status{font-size:5px;font-family:'Press Start 2P',monospace;padding:4px 9px;border-radius:5px;display:inline-block;align-self:center;}
 .ball-card-status.owned{color:#667;background:rgba(255,255,255,.04);}
 .ball-card-status.active{color:#00ff88;background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);}
 .ball-card-status.price{color:var(--Y);background:rgba(255,220,0,.08);border:1px solid rgba(255,220,0,.22);}
@@ -1047,10 +1048,17 @@ body.mode-pc #sModes > *{
 <div class="mCornerBtn" id="mBtnTL" title="Perfil y Logros" onclick="showProfile()">🎮</div>
 <div class="mCornerBtn" id="mBtnTR" title="Configuracion" onclick="showSettings()">⚙️</div>
 
-<div id="settingsModal" style="display:none;position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.78);align-items:center;justify-content:center;flex-direction:column;gap:16px;">
-  <div style="background:#0d0d22;border:3px solid #aa44dd;padding:28px 32px;max-width:340px;width:90%;text-align:center;">
+<div id="settingsModal" style="display:none;position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.78);align-items:center;justify-content:center;flex-direction:column;">
+  <div style="background:#0d0d22;border:3px solid #aa44dd;max-width:340px;width:90%;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;">
+    <div style="overflow-y:auto;padding:28px 32px;text-align:center;">
     <div style="font-size:13px;color:#aa44dd;text-shadow:0 0 12px #aa44dd;margin-bottom:20px;" data-i18n="settings">SETTINGS</div>
     <div style="font-size:8px;color:#aaa;margin-bottom:18px;line-height:2.2;">Version: 3.0.0<br>Regular Show — Chaosphere<br>Grudgeball Enhanced</div>
+    <!-- Cuenta / Login -->
+    <div style="margin-bottom:16px;border:1px solid #2a1a4a;border-radius:8px;padding:12px;">
+      <div style="font-size:7px;color:#9944cc;margin-bottom:10px;letter-spacing:1px;">👤 CUENTA</div>
+      <div id="settingsAccountStatus" style="font-size:6px;color:#778;margin-bottom:10px;line-height:1.7;"></div>
+      <button id="settingsAccountBtn" style="font-family:'Press Start 2P',monospace;font-size:7px;padding:9px 14px;cursor:pointer;border:2px solid #aa44dd;border-radius:6px;background:rgba(90,20,140,.5);color:#dd99ff;width:100%;">🔗 INICIAR SESIÓN / CREAR CUENTA</button>
+    </div>
     <!-- Language selector -->
     <div style="margin-bottom:16px;border:1px solid #2a1a4a;border-radius:8px;padding:12px;">
       <div style="font-size:7px;color:#9944cc;margin-bottom:10px;letter-spacing:1px;" data-i18n="language">🌐 LANGUAGE</div>
@@ -1085,6 +1093,7 @@ body.mode-pc #sModes > *{
     <div style="display:flex;flex-direction:column;gap:10px;">
       <button onclick="if(confirm(t('confirmReset')))resetProgress();" style="font-family:'Press Start 2P',monospace;font-size:8px;border:2px solid #ff2277;color:#ff2277;background:transparent;padding:9px;cursor:pointer;" data-i18n="resetProgress">RESET PROGRESS</button>
       <button onclick="closeSettings()" style="font-family:'Press Start 2P',monospace;font-size:9px;border:2px solid #aa44dd;color:#aa44dd;background:transparent;padding:10px;cursor:pointer;" data-i18n="close">CLOSE</button>
+    </div>
     </div>
   </div>
 </div>
@@ -1793,6 +1802,10 @@ body.mode-pc #sModes > *{
     <div id="j2BallBadge" style="font-size:7px;font-family:'Press Start 2P',monospace;padding:3px 8px;border-radius:4px;border:2px solid #ff2277;color:#ff2277;background:rgba(60,0,20,.7);opacity:.4;">J2 · ↑/↓ mover · ENTER lanzar</div>
   </div>
   <canvas id="cv" width="820" height="460"></canvas>
+  <div id="cloneCopyModal" style="display:none;position:absolute;inset:0;z-index:60;background:rgba(0,0,0,.82);flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;">
+    <div style="font-size:9px;color:#44ddaa;letter-spacing:1px;text-align:center;">¡DOBLE VIDRIO! ELIGE A QUIÉN COPIAR</div>
+    <div id="cloneCopyGrid" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:600px;"></div>
+  </div>
   <div id="botBar">
     <div id="rageRow">
       <span class="rLab" id="rLabJ">⚡J1</span><div class="rTrack"><div class="rFill bl" id="rJ"></div></div>
@@ -2508,7 +2521,21 @@ function showWithLoad(id,ms,onReady){
     _loadTransitioning=false;
   },ms);
 }
-function showSettings(){$$('settingsModal').style.display='flex';updateModeButtons();_refreshMusicToggles();}
+function showSettings(){$$('settingsModal').style.display='flex';updateModeButtons();_refreshMusicToggles();_refreshSettingsAccount();}
+function _refreshSettingsAccount(){
+  const statusEl=$$('settingsAccountStatus'),btnEl=$$('settingsAccountBtn');
+  if(!statusEl||!btnEl)return;
+  const mode=window._fbAuthMode;
+  if(mode==='firebase'||mode==='bap'){
+    statusEl.innerHTML='✅ Conectado'+(window._gbName?' como <span style="color:#dd99ff;">'+window._gbName+'</span>':'')+'<br>Tu progreso se guarda en la nube.';
+    btnEl.textContent='⚙️ GESTIONAR CUENTA';
+    btnEl.onclick=function(){closeSettings();showProfile();};
+  }else{
+    statusEl.textContent='Sin cuenta — el progreso solo se guarda en este navegador.';
+    btnEl.textContent='🔗 INICIAR SESIÓN / CREAR CUENTA';
+    btnEl.onclick=function(){closeSettings();if(window._fbShowAuthGate)window._fbShowAuthGate();};
+  }
+}
 function closeProfile(){$$('profileModal').style.display='none';}
 function showProfile(){
   const body=$$('profileBody');if(!body)return;
@@ -2920,6 +2947,7 @@ const CHARS={
   },
   // FUTURE VARIANTS
   future_mordecai:{
+    baseChar:'mordecai',
     name:'Mordecai Futuro',role:'ATAQUE',col:'#00c8ff',unlocked:false,atq:4,def:2,spd:3,
     icon:'https://chibi.iitranq.co.uk/VOcf0o8BninG.jpg',
     img:'https://chibi.iitranq.co.uk/2aPrWYFQoT91.png',
@@ -2928,6 +2956,7 @@ const CHARS={
     super:'MORDO BLAST',superFn:'superMordecai',leaderBuff:'BUFF: Todo el equipo +1 daño'
   },
   future_rigby:{
+    baseChar:'rigby',
     name:'Rigby Futuro',role:'VELOCIDAD',col:'#aa7733',unlocked:false,atq:3,def:1,spd:5,
     icon:'https://chibi.iitranq.co.uk/YbwhYt5gMKJw.jpg',
     img:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',
@@ -2939,15 +2968,22 @@ const CHARS={
   // en un clon idéntico a Rigby. Stats/super/leaderBuff iguales a Rigby por diseño.
   // Usa temporalmente el arte de Rigby (Doug es un clon visual idéntico en el canon);
   // reemplazar icon/img/shardImg/sprites si se consigue arte específico de Doug.
+  // DOUG — CLONADOR DE COPIADO DIN\u00c1MICO (Opción B). Apareció en "Temp Check".
+  // Stats base propios y discretos; su poder real está en su super (superDoug),
+  // que copia stats/rango/super del Rigby del equipo RIVAL al momento de usarse
+  // (prioriza 'rigby' exacto, luego cualquier variante, y si no hay ninguno
+  // copia a un rival aleatorio). Antes de usar su super, juega como un personaje
+  // normal con estos stats base.
   doug:{
-    name:'Doug',role:'VELOCIDAD',col:'#aa7733',unlocked:false,atq:3,def:1,spd:5,
+    name:'Doug',role:'VELOCIDAD',col:'#aa7733',unlocked:false,atq:3,def:1,spd:4,
     icon:'https://chibi.iitranq.co.uk/bQdsQ2NRwJHo.jpg',
     img:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',
     rarity:'rare',rank:2,shardImg:'https://chibi.iitranq.co.uk/bQdsQ2NRwJHo.jpg',
     sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png'),
-    super:'TECH KWON DO',superFn:'superRigby',leaderBuff:'BUFF: Pases +50% velocidad'
+    super:'COPIA DE RIGBY',superFn:'superDoug',leaderBuff:'BUFF: Pases +30% velocidad'
   },
   future_skips:{
+    baseChar:'skips',
     name:'Skips Futuro',role:'DEFENSA',col:'#eeddaa',unlocked:false,atq:2,def:5,spd:2,
     icon:'https://chibi.iitranq.co.uk/HH0S5DVTkRWy.jpg',
     img:'https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200',
@@ -2956,6 +2992,7 @@ const CHARS={
     super:'BIONIC BARRIER',superFn:'superSkips',leaderBuff:'BUFF: Ventana de bloqueo x2'
   },
   future_benson:{
+    baseChar:'benson',
     name:'Benson Futuro',role:'EQUILIBRIO',col:'#cc4422',unlocked:false,atq:3,def:3,spd:3,
     icon:'https://chibi.iitranq.co.uk/HFU4XLM3Z862.jpg',
     img:'https://chibi.iitranq.co.uk/PDP0FW4RvQXS.png',
@@ -2971,6 +3008,7 @@ const CHARS={
     super:'RAGE BURST',superFn:'superBenson',leaderBuff:'BUFF: Rabia +30% más rápido'
   },
   future_muscleman:{
+    baseChar:'muscleman',
     name:'Future Muscle Man',nameEs:'Musculoso Futuro',role:'POTENCIA',col:'#44bb44',unlocked:false,atq:5,def:2,spd:1,
     icon:'https://chibi.iitranq.co.uk/6KSt3IMR9zuC.jpg',
     img:'https://chibi.iitranq.co.uk/56i08W90Jwvv.png',
@@ -2987,6 +3025,7 @@ const CHARS={
   },
   // MORDECAI BOTADO — antes era una skin, ahora personaje independiente (Raro)
   dumped_mordecai:{
+    baseChar:'mordecai',
     name:'Mordecai Botado',role:'ATAQUE',col:'#00c8ff',unlocked:false,atq:4,def:2,spd:3,
     icon:'https://chibi.iitranq.co.uk/NWN0IQeLJJBy.jpg',
     img:'https://chibi.iitranq.co.uk/PH3nL2rYl1zu.png',
@@ -3009,10 +3048,11 @@ const CHARS={
     img:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
     rarity:'epic',rank:3,shardImg:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
     sprites:mkSprites('https://chibi.iitranq.co.uk/AzGqed7GTFey.png'),
-    super:'MORDO BLAST + TECH KWON DO',superFn:null,leaderBuff:'BUFF: Todo el equipo +1 daño',
+    super:'DOBLE VIDRIO',superFn:'superCloneMordecaiRigby',leaderBuff:'BUFF: Todo el equipo +1 daño',
     dualOf:['mordecai','rigby'],dualHp:2,isGlass:true
   },
   young_skips:{
+    baseChar:'skips',
     name:'Skips Joven',role:'DEFENSA',col:'#eeddaa',unlocked:false,atq:2,def:5,spd:2,
     icon:'https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200',
     img:'https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200',
@@ -3641,9 +3681,22 @@ function buildVsEnemySlots(){
     wrap.appendChild(slot);
   });
 }
+// Devuelve el "personaje raíz" de una clave (él mismo si es base, o su baseChar si es variante).
+// Excepción: clone_mordecai_rigby NO tiene raíz compartida con nadie (puede coexistir
+// con Mordecai y/o Rigby normales — en el episodio son personajes aparte).
+function effectiveBaseChar(key){
+  if(key==='clone_mordecai_rigby')return key;
+  const c=CHARS[key];
+  return(c&&c.baseChar)||key;
+}
 function teamToggleChar(k){
   if(selectedChars.has(k)){if(leaderKey===k){const others=[...selectedChars].filter(x=>x!==k);if(others.length)leaderKey=others[0];}if(selectedChars.size>1)selectedChars.delete(k);}
-  else{if(selectedChars.size>=3){const oldest=[...selectedChars].find(x=>x!==leaderKey);if(oldest)selectedChars.delete(oldest);}selectedChars.add(k);}
+  else{
+    const newRoot=effectiveBaseChar(k);
+    const dupe=[...selectedChars].find(x=>effectiveBaseChar(x)===newRoot);
+    if(dupe){toast('Ya tienes a '+charName(CHARS[dupe])+' en el equipo (misma base)','#ff4444');return;}
+    if(selectedChars.size>=3){const oldest=[...selectedChars].find(x=>x!==leaderKey);if(oldest)selectedChars.delete(oldest);}selectedChars.add(k);
+  }
   if(selectedChars.has(k))leaderKey=k;buildCharSelect();
 }
 function buildLeaderBuff(){
@@ -3741,16 +3794,22 @@ function setupArena(t){
 // Ocupa 1 solo slot de selectedChars/Colección/fichas, pero en combate aporta
 // 2 Fighters reales (normalmente más frágiles, ver maxHpOverride por personaje).
 function _spawnTeamFighters(keys,side){
-  const expanded=[]; // [{key, defObj}] — ya expandido, 1 o 2 entradas por slot
+  const expanded=[]; // [{key, defObj, sharedSuperState}] — ya expandido, 1 o 2 entradas por slot
   keys.forEach(k=>{
     const def=CHARS[k];
     if(def&&def.dualOf&&def.dualOf.length===2){
+      // Ambas mitades comparten el MISMO super especial (no el super individual de cada uno)
+      // y el mismo contador de usos — conceptualmente es 1 solo super en 2 cuerpos.
+      const sharedSuperState={uses:0};
       def.dualOf.forEach(dk=>{
         const dualDef=CHARS[dk];
-        if(dualDef)expanded.push({key:dk,defObj:dualDef,hpOverride:def.dualHp||null});
+        if(dualDef){
+          const overriddenDef={...dualDef,super:def.super,superFn:def.superFn};
+          expanded.push({key:dk,defObj:overriddenDef,hpOverride:def.dualHp||null,sharedSuperState});
+        }
       });
     }else if(def){
-      expanded.push({key:k,defObj:def,hpOverride:null});
+      expanded.push({key:k,defObj:def,hpOverride:null,sharedSuperState:null});
     }
   });
   const n=expanded.length||1;
@@ -3758,7 +3817,9 @@ function _spawnTeamFighters(keys,side){
   const x=side==='l'?52:708;
   return expanded.map((e,i)=>{
     const y=n===1?(topY+botY)/2:topY+(botY-topY)*(i/(n-1));
-    return new Fighter(e.key,e.defObj,x,y,side,e.hpOverride||undefined);
+    const f=new Fighter(e.key,e.defObj,x,y,side,e.hpOverride||undefined);
+    if(e.sharedSuperState)f._sharedSuperState=e.sharedSuperState;
+    return f;
   });
 }
 
@@ -3860,7 +3921,7 @@ class Fighter{
   takeDmg(d,ignoreArmor=false){
     if(!this.alive)return;if(this.armor>0&&!ignoreArmor){this.armor--;spawnFloat('ARMADURA!',this.x+this.w/2,this.y-10,'#aaaaaa');return;}
     // Bonus de RANGO+NIVEL: reduce el daño recibido según el % de defensa del propio personaje (tope 50%)
-    if(this.key&&CHARS[this.key]){const defBonus=Math.min(.5,roleBonusParts(this.key).def);if(defBonus>0)d=Math.max(1,Math.round(d*(1-defBonus)));}
+    if(this.key&&CHARS[this.key]){const bonusKey=this._copiedKey||this.key;const defBonus=Math.min(.5,roleBonusParts(bonusKey).def);if(defBonus>0)d=Math.max(1,Math.round(d*(1-defBonus)));}
     const _prev=this.hp;this.hp=Math.max(0,this.hp-d);const _actual=_prev-this.hp;
     if(_actual>0){if(this.side==='r')bStats.dmg+=_actual;else bStats.recv+=_actual;sfxHit();}
     this.hitFlash=16;this._hurtTimer=22;this.recoilX=this.side==='r'?4:-4;spawnFloat(`-${d}`,this.x+this.w/2,this.y-8,'#ff4444');spark(this.x+this.w/2,this.y+this.h/2,this.col,6);
@@ -4592,6 +4653,70 @@ cv.addEventListener('touchstart',onPointerDown,{passive:false});cv.addEventListe
 function doSuper(){if(rageJ<100||ball.inFlight)return;const hero=activeJ();if(!hero||(hero._throwCooldown||0)>0)return;rageJ=0;updHUD();updRageBtn();hero._superTimer=45;msg('¡SUPER DE '+(hero.nameEs&&_lang==="es"?hero.nameEs:hero.name).toUpperCase()+'!');shakeF=18;shakeA=9;const fn=hero.superFn;if(fn&&window[fn])window[fn](hero);else{const ve=teamE.filter(j=>j.alive);if(ve.length){ve[0].takeDmg(3);spawnFloat('SUPER!',ve[0].x,ve[0].y-20,'#cc44ff');}}if(hero.superFn){const sn=hero.superFn.replace('super','').replace('eSuper','');if(!chalSession.uniqueSupers.has(sn)){chalSession.uniqueSupers.add(sn);chalSession.supersUsed.push(sn);}}updHUD();checkWin();}
 window.superMordecai=function(h){const ve=teamE.filter(j=>j.alive);explosion(W/2,H/2);spawnFloat('MORDO BLAST!',W/2,80,'#00d4ff');ve.forEach(e=>{e.takeDmg(2);spark(e.x+e.w/2,e.y,e.col,8);});if(leaderBuffActive.key==='mordecai')ve.forEach(e=>e.takeDmg(1));};
 window.superRigby=function(h){const ve=teamE.filter(j=>j.alive);if(!ve.length)return;const tgt=ve[Math.floor(Math.random()*ve.length)];spawnFloat('TECH KWON DO!',h.x+h.w/2,h.y-20,'#88cc44');setTimeout(()=>{tgt.takeDmg(4,true);spark(tgt.x+tgt.w/2,tgt.y+tgt.h/2,tgt.col,12);updHUD();checkWin();},300);};
+// DOUG — copia al Rigby del equipo RIVAL (stats/rango/super) solo al activar su super.
+// Prioriza 'rigby' exacto; si no está, cualquier variante (baseChar:'rigby'); si no hay
+// ningún Rigby en el rival, copia a un rival aleatorio cualquiera.
+window.superDoug=function(h){
+  const rivals=(typeof teamE!=='undefined'?teamE:[]).filter(j=>j.alive&&j.key);
+  let target=rivals.find(j=>j.key==='rigby')
+    ||rivals.find(j=>effectiveBaseChar(j.key)==='rigby')
+    ||(rivals.length?rivals[Math.floor(Math.random()*rivals.length)]:null);
+  if(!target){spawnFloat('¡SIN OBJETIVO!',h.x+h.w/2,h.y-20,'#888');return;}
+  h._copiedKey=target.key;
+  const copiedDef=CHARS[target.key];
+  const copiedFn=copiedDef&&copiedDef.superFn;
+  spawnFloat('¡COPIA: '+(copiedDef?charName(copiedDef).toUpperCase():target.key)+'!',h.x+h.w/2,h.y-26,'#aa7733');
+  if(copiedFn&&window[copiedFn]&&copiedFn!=='superDoug')window[copiedFn](h);
+  else{const ve=teamE.filter(j=>j.alive);if(ve.length){ve[0].takeDmg(2);spawnFloat('COPIA!',ve[0].x,ve[0].y-20,'#aa7733');}}
+};
+// CLONE MORDECAI AND RIGBY — super "DOBLE VIDRIO".
+// 1er uso en la partida: efecto combinado de Mordecai+Rigby base (sin copiar a nadie).
+// 2do uso en adelante: el jugador elige a quién del equipo RIVAL copiar, y se ejecuta
+// el super de ese personaje copiado (igual mecanismo de _copiedKey que usa Doug).
+window.superCloneMordecaiRigby=function(h){
+  const state=h._sharedSuperState||(h._sharedSuperState={uses:0});
+  state.uses++;
+  if(state.uses===1){
+    // Efecto base: combinación reducida de MORDO BLAST + TECH KWON DO
+    const ve=teamE.filter(j=>j.alive);
+    spawnFloat('¡MORDO BLAST + TECH KWON DO!',h.x+h.w/2,h.y-26,'#44ddaa');
+    explosion(W/2,H/2);
+    ve.forEach(e=>e.takeDmg(1));
+    if(ve.length){const tgt=ve[Math.floor(Math.random()*ve.length)];setTimeout(()=>{tgt.takeDmg(2,true);spark(tgt.x+tgt.w/2,tgt.y+tgt.h/2,tgt.col,10);updHUD();checkWin();},250);}
+    return;
+  }
+  _openCloneCopyModal(h);
+};
+function _openCloneCopyModal(h){
+  const rivals=(typeof teamE!=='undefined'?teamE:[]).filter(j=>j.alive&&j.key&&CHARS[j.key]);
+  const modal=$$('cloneCopyModal'),grid=$$('cloneCopyGrid');if(!modal||!grid)return;
+  if(!rivals.length){spawnFloat('¡SIN OBJETIVO!',h.x+h.w/2,h.y-20,'#888');return;}
+  grid.innerHTML='';
+  rivals.forEach(r=>{
+    const def=CHARS[r.key];const rcol=def.rarity?RARITY_COLOR[def.rarity]:'#556';
+    const card=document.createElement('div');
+    card.style.cssText=`width:84px;background:#0d0d1c;border:2px solid ${rcol}88;border-radius:10px;padding:7px;text-align:center;cursor:pointer;`;
+    card.innerHTML=`<img src="${getIconSrc(r.key)||def.img||''}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;" onerror="this.style.display='none';">
+      <div style="font-size:4.5px;color:#cdd;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${charName(def)}</div>`;
+    card.onmouseenter=()=>card.style.borderColor=rcol;
+    card.onmouseleave=()=>card.style.borderColor=rcol+'88';
+    card.onclick=()=>{
+      modal.style.display='none';
+      h._copiedKey=r.key;
+      // Ambas mitades del doble comparten la copia (si el otro fighter sigue vivo)
+      if(h._sharedSuperState){
+        const teamRef=h.side==='l'?teamJ:teamE;
+        teamRef.forEach(f=>{if(f!==h&&f._sharedSuperState===h._sharedSuperState)f._copiedKey=r.key;});
+      }
+      const copiedFn=def.superFn;
+      spawnFloat('¡COPIA: '+charName(def).toUpperCase()+'!',h.x+h.w/2,h.y-26,'#44ddaa');
+      if(copiedFn&&window[copiedFn]&&copiedFn!=='superCloneMordecaiRigby')window[copiedFn](h);
+      else{r.takeDmg(2);spawnFloat('COPIA!',r.x,r.y-20,'#44ddaa');}
+    };
+    grid.appendChild(card);
+  });
+  modal.style.display='flex';
+}
 window.superSkips=function(h){skipsShield=true;teamJ.filter(j=>j.alive).forEach(j=>j.armor=2);spawnFloat('BARRERA BIÓNICA!',h.x+h.w/2,h.y-20,'#bb88ff');spawnFloat('EQUIPO PROTEGIDO',W/2,100,'#aaaaaa');};
 window.superBenson=function(h){rageJ=100;updRageBtn();const ve=teamE.filter(j=>j.alive);if(ve.length){const t=ve[Math.floor(Math.random()*ve.length)];t.takeDmg(2);}spawnFloat('RAGE BURST!',W/2,H/2,'#ff6644');};
 function _healAmount(caster){
@@ -4798,7 +4923,7 @@ function onImpact(){
     if(ball.type==='poisonball'){dest.poisoned=3;spawnFloat('VENENO!',dest.x,dest.y-20,'#00cc44');}
     if(ball.type==='blastball'){const ot=dest.side==='l'?teamE:teamJ;ot.filter(j=>j.alive&&j!==dest).forEach(j=>{if(Math.sqrt((j.x-dest.x)**2+(j.y-dest.y)**2)<120)j.takeDmg(1);});spawnFloat('BLAST AOE!',dest.x,dest.y-20,'#ff8800');explosion(dest.x+dest.w/2,dest.y);}
     // Bonus de RANGO+NIVEL: el personaje que lanza aplica su % de daño (según su rol) como multiplicador
-    if(src&&src.key&&CHARS[src.key]){const dmgBonus=roleBonusParts(src.key).dmg;if(dmgBonus>0)dmg=Math.round(dmg*(1+dmgBonus));}
+    if(src&&src.key&&CHARS[src.key]){const bonusKey=src._copiedKey||src.key;const dmgBonus=roleBonusParts(bonusKey).dmg;if(dmgBonus>0)dmg=Math.round(dmg*(1+dmgBonus));}
     dest.takeDmg(dmg);msg('¡IMPACTO en '+(dest.nameEs&&_lang==='es'?dest.nameEs:dest.name)+'! -'+dmg+' HP'+(ball.type!=='normal'?' ['+ball.type.toUpperCase()+']':''));
     shakeF=10;shakeA=6;triggerHitFlash(ball.type==='fireball'?'#ff4400':ball.type==='poisonball'?'#00cc44':'#ffffff');if(dest.alive){ball.owner=dest;}ball.charge=0;
     if(src&&src.side==='l'){addRage('j',15+(ball.type!=='normal'?10:0));addCombo();}else{addRage('e',15);if(src&&src.side==='r')resetCombo();}
@@ -7404,7 +7529,6 @@ function fbSaveName() {
 let _authMode = 'login'; // 'login' | 'register'
 
 window._fbShowAuthGate = function() {
-  try { if (sessionStorage.getItem('gb_authSkip')) return; } catch(e) {}
   const m = document.getElementById('authGateModal');
   if (m) m.style.display = 'flex';
   try {
@@ -7506,7 +7630,6 @@ async function profileBapLogin() {
 }
 
 function authSkip() {
-  try { sessionStorage.setItem('gb_authSkip', '1'); } catch(e) {}
   const m = document.getElementById('authGateModal');
   if (m) m.style.display = 'none';
   toast('Jugando sin cuenta — el progreso solo se guarda en este navegador', '#ffaa00');
