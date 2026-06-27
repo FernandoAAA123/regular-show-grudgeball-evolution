@@ -25,7 +25,7 @@
 <meta name="twitter:title" content="Regular Show: Grudgeball Evolution">
 <meta name="twitter:description" content="Regular Show: Grudgeball Evolution — juego de dodgeball multijugador online. ¡Elige tu equipo, lanza la pelota y sube de rango!">
 <meta name="twitter:image" content="https://chibi.iitranq.co.uk/mw7fgng37rnJ.png">
-<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Regular%20Show%3A%20Grudgeball%20Evolution%22%2C%22short_name%22%3A%22Grudgeball%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%2300d4ff%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22https%3A%2F%2Fchibi.iitranq.co.uk%2Fmw7fgng37rnJ.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
+
 <link rel="apple-touch-icon" href="https://chibi.iitranq.co.uk/mw7fgng37rnJ.png">
 <link rel="icon" href="https://chibi.iitranq.co.uk/mw7fgng37rnJ.png">
 <!-- PeerJS ya no se usa: la señalización P2P ahora corre sobre Firebase RTDB + WebRTC nativo -->
@@ -44,7 +44,10 @@
 <script type="module">
 import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, signInAnonymously, onAuthStateChanged }
+import { getAuth, onAuthStateChanged, signOut,
+         GoogleAuthProvider, signInWithPopup,
+         createUserWithEmailAndPassword, signInWithEmailAndPassword,
+         setPersistence, browserLocalPersistence }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -64,6 +67,9 @@ const firebaseConfig = {
   appId:             "1:511778684540:web:67d2b57460aab0bfa713f9"
 };
 // ──────────────────────────────────────────────────────────
+// URL pública de BAP ID (hub de cuentas de BAP Studios)
+const BAP_ID_URL = 'https://fernandoaaa123.github.io/BAP-ID/';
+// ──────────────────────────────────────────────────────────
 
 // Detectar si la config ya fue reemplazada
 const _fbConfigured = !firebaseConfig.apiKey.startsWith('TU_');
@@ -72,7 +78,7 @@ if (!_fbConfigured) {
   console.warn('[Grudgeball/Firebase] Config no reemplazada — modo offline.');
 }
 
-let _fbApp, _fbAuth, _fbFs, _fbRtdb, _fbUid = null;
+let _fbApp, _fbAuth, _fbFs, _fbRtdb, _fbUid = null, _fbMode = null; // _fbMode: 'firebase' | 'bap' | null
 
 if (_fbConfigured) {
   try {
@@ -80,6 +86,9 @@ if (_fbConfigured) {
     _fbAuth = getAuth(_fbApp);
     _fbFs   = getFirestore(_fbApp);
     _fbRtdb = getDatabase(_fbApp);
+    setPersistence(_fbAuth, browserLocalPersistence).catch(e =>
+      console.warn('[Firebase] Persistence:', e.message)
+    );
 
     // ── Helpers RTDB para señalización P2P (matchmaking + salas) ──
     // Expuestos a window para que el código clásico (no-module) los use.
@@ -98,23 +107,166 @@ if (_fbConfigured) {
     };
     window._fbServerTs = () => rtdbTimestamp();
 
-    // ── Auth anónima ──────────────────────────────────────
+    // ── Auth real: Google, usuario+contraseña, o BAP ID ───────
+    // (Ya NO se usa auth anónima — generaba un usuario nuevo en
+    //  Authentication cada vez que no había sesión persistida)
     onAuthStateChanged(_fbAuth, user => {
       if (user) {
+        _fbMode = 'firebase';
+        window._fbAuthMode = 'firebase';
         _fbUid = user.uid;
         window._fbUid = user.uid;
+        if (!window._gbName) window._gbName = user.displayName || ('Jugador_' + user.uid.slice(0,6));
         _fbSetStatus('✅ Conectado');
-        // Cargar save de la nube al iniciar sesión
+        if (window._fbHideAuthGate) window._fbHideAuthGate();
         _fbLoadCloud();
+      } else if (_fbMode !== 'bap') {
+        // No hay sesión de Firebase Auth — intentar restaurar BAP ID,
+        // y si no hay nada guardado, mostrar la pantalla de login.
+        _fbMode = null;
+        window._fbAuthMode = null;
+        _fbUid = null;
+        window._fbUid = null;
+        _fbSetStatus('Sin conexión (inicia sesión)');
+        _fbTryRestoreBap();
       }
     });
-    signInAnonymously(_fbAuth).catch(e =>
-      console.warn('[Firebase] Auth:', e.message)
-    );
   } catch(e) {
     console.warn('[Firebase] Init error:', e.message);
   }
+} else {
+  // Firebase no configurado: no hay nada que mostrar, se juega en modo offline.
 }
+
+// ── Restaurar sesión de BAP ID guardada localmente (sin reabrir el popup) ──
+function _fbTryRestoreBap() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('gb_bapSession') || 'null');
+    if (saved && saved.uid) {
+      _fbMode = 'bap';
+      window._fbAuthMode = 'bap';
+      _fbUid = saved.uid;
+      window._fbUid = saved.uid;
+      if (!window._gbName) window._gbName = saved.name;
+      _fbSetStatus('✅ Conectado (BAP ID)');
+      if (window._fbHideAuthGate) window._fbHideAuthGate();
+      _fbLoadCloud();
+      return;
+    }
+  } catch(e) {}
+  if (window._fbShowAuthGate) window._fbShowAuthGate();
+}
+
+// ── Login con Google (cuenta real propia de Grudgeball) ───────
+window._fbGoogleLogin = async function() {
+  if (!_fbAuth) return {ok:false, error:'Firebase no configurado'};
+  try {
+    await signInWithPopup(_fbAuth, new GoogleAuthProvider());
+    return {ok:true};
+  } catch(e) {
+    let m = 'No se pudo iniciar sesión con Google.';
+    if (e.code === 'auth/popup-closed-by-user') m = 'Cerraste la ventana antes de terminar.';
+    else if (e.code === 'auth/popup-blocked') m = 'El navegador bloqueó la ventana. Permite popups e intenta de nuevo.';
+    return {ok:false, error:m};
+  }
+};
+
+// ── Usuario + contraseña (cuenta propia, sin email real) ──────
+function _fbEmailFromUsername(u) {
+  return u.trim().toLowerCase().replace(/[^a-z0-9_]/g,'') + '@grudgeball.local';
+}
+window._fbRegister = async function(username, password) {
+  if (!_fbAuth) return {ok:false, error:'Firebase no configurado'};
+  const clean = (username||'').trim();
+  if (clean.length < 3) return {ok:false, error:'El usuario debe tener al menos 3 caracteres'};
+  if (!/^[a-zA-Z0-9_]+$/.test(clean)) return {ok:false, error:'Solo letras, números y guion bajo'};
+  if (!password || password.length < 6) return {ok:false, error:'La contraseña debe tener al menos 6 caracteres'};
+  try {
+    await createUserWithEmailAndPassword(_fbAuth, _fbEmailFromUsername(clean), password);
+    window._gbName = clean;
+    try { localStorage.setItem('gb_fbname', clean); } catch(e){}
+    return {ok:true};
+  } catch(e) {
+    let msg = 'Error al crear cuenta';
+    if (e.code === 'auth/email-already-in-use') msg = 'Ese usuario ya existe. Inicia sesión.';
+    else if (e.code === 'auth/weak-password') msg = 'Contraseña muy débil (mínimo 6 caracteres)';
+    return {ok:false, error: msg};
+  }
+};
+window._fbLogin = async function(username, password) {
+  if (!_fbAuth) return {ok:false, error:'Firebase no configurado'};
+  const clean = (username||'').trim();
+  if (!clean || !password) return {ok:false, error:'Completa usuario y contraseña'};
+  try {
+    await signInWithEmailAndPassword(_fbAuth, _fbEmailFromUsername(clean), password);
+    window._gbName = clean;
+    try { localStorage.setItem('gb_fbname', clean); } catch(e){}
+    return {ok:true};
+  } catch(e) {
+    let msg = 'Usuario o contraseña incorrectos';
+    if (e.code === 'auth/too-many-requests') msg = 'Demasiados intentos. Espera un momento.';
+    return {ok:false, error: msg};
+  }
+};
+
+// ── Conectar con BAP ID (cuenta central de BAP Studios) ────────
+// Abre BAP_ID.html en un popup; BAP ID hace login/registro ahí y
+// devuelve {uid,name,email} por postMessage. No usamos Firebase Auth
+// de este proyecto para este modo: simplemente usamos el uid de BAP
+// como clave de guardado en Firestore (igual de seguro que la auth
+// anónima que reemplaza, ya que las reglas siguen en modo prueba).
+window._fbBapLogin = function() {
+  return new Promise((resolve) => {
+    const popup = window.open(BAP_ID_URL, 'bapIdLogin', 'width=460,height=720');
+    if (!popup) { resolve({ok:false, error:'El navegador bloqueó la ventana. Permite popups e intenta de nuevo.'}); return; }
+    let settled = false;
+    const onMsg = (e) => {
+      if (!e.data || e.data.type !== 'BAP_ID_LOGIN') return;
+      settled = true;
+      window.removeEventListener('message', onMsg);
+      clearInterval(poll);
+      const { uid, name, email } = e.data;
+      _fbMode = 'bap';
+      window._fbAuthMode = 'bap';
+      _fbUid = uid;
+      window._fbUid = uid;
+      window._gbName = name || (email ? email.split('@')[0] : window._gbName);
+      try {
+        localStorage.setItem('gb_bapSession', JSON.stringify({uid, name, email}));
+        if (window._gbName) localStorage.setItem('gb_fbname', window._gbName);
+      } catch(err) {}
+      _fbSetStatus('✅ Conectado (BAP ID)');
+      if (window._fbHideAuthGate) window._fbHideAuthGate();
+      _fbLoadCloud();
+      resolve({ok:true});
+    };
+    window.addEventListener('message', onMsg);
+    // Si cierran el popup sin loguearse, no dejar la promesa colgada
+    const poll = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(poll);
+        if (!settled) {
+          window.removeEventListener('message', onMsg);
+          resolve({ok:false, error:'Ventana cerrada antes de iniciar sesión.'});
+        }
+      }
+    }, 500);
+  });
+};
+
+// ── Cerrar sesión (Firebase Auth o BAP ID, según el modo activo) ──
+window._fbLogout = async function() {
+  try {
+    if (_fbMode === 'bap') {
+      try { localStorage.removeItem('gb_bapSession'); } catch(e) {}
+      _fbMode = null; window._fbAuthMode = null; _fbUid = null; window._fbUid = null;
+      _fbSetStatus('Sin conexión (inicia sesión)');
+      if (window._fbShowAuthGate) window._fbShowAuthGate();
+    } else if (_fbAuth) {
+      await signOut(_fbAuth);
+    }
+  } catch(e) {}
+};
 
 // ── UI helper ─────────────────────────────────────────────
 function _fbSetStatus(msg, col) {
@@ -171,7 +323,7 @@ async function _fbLoadCloud() {
         const cr = cloud.onlineRank;
         merged.onlineRank = (cr.pts||0) > (lr.pts||0) ? cr : lr;
       }
-      window.sv = merged;
+      Object.assign(window.sv, merged); // FIX: mutar en lugar de reemplazar, así sigue siendo el mismo objeto que usa el juego
       if (window.saveSv) window.saveSv();   // persiste en localStorage
       if (window.refreshUI) window.refreshUI();
     }
@@ -358,7 +510,6 @@ body.mode-pc .mTitleImg{max-width:min(540px,55vw);max-height:28vh;margin-top:cla
 }
 .shop-tab:hover{color:#6aaccc;}
 .shop-tab.active{color:#00d4ff;border-bottom-color:#00d4ff;background:rgba(0,212,255,.04);}
-.shop-tab.skins-tab.active{color:var(--OR);border-bottom-color:var(--OR);background:rgba(255,136,0,.04);}
 .shop-panel{display:none;width:100%;flex-direction:column;align-items:center;}
 .shop-panel.active{display:flex;}
 .shop-grid{
@@ -428,6 +579,7 @@ body.mode-pc .mTitleImg{max-width:min(540px,55vw);max-height:28vh;margin-top:cla
   cursor:pointer;transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease;
   position:relative;overflow:hidden;padding-bottom:10px;
   box-shadow:0 2px 8px rgba(0,0,0,.35);
+  display:flex;flex-direction:column;
 }
 .ball-card:hover{transform:translateY(-4px);box-shadow:0 8px 20px rgba(0,0,0,.45);}
 .chest-stack-card:hover{transform:translateY(-4px) scale(1.02);}
@@ -954,6 +1106,46 @@ body.mode-pc #sModes > *{
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════
+     AUTH GATE — Registro / Inicio de sesión (reemplaza auth anónima)
+     ══════════════════════════════════════════════════════ -->
+<div id="authGateModal" style="display:none;position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.9);align-items:center;justify-content:center;flex-direction:column;">
+  <div style="background:#0a0a1e;border:3px solid #00d4ff;border-radius:14px;padding:22px 22px 18px;max-width:340px;width:90%;box-shadow:0 0 50px rgba(0,212,255,.25);max-height:88vh;overflow-y:auto;">
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:24px;">☁️</div>
+      <div style="font-size:11px;color:#00d4ff;text-shadow:0 0 12px #00d4ff;letter-spacing:2px;margin-top:6px;">CUENTA EN LA NUBE</div>
+      <div style="font-size:6px;color:#556;margin-top:6px;line-height:1.7;">Crea una cuenta para guardar tu progreso<br>de forma segura y no perderlo nunca.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+      <button id="authBapBtn" class="fb-btn orange" style="width:100%;padding:11px;font-size:6.5px;" onclick="authBapLogin()">🔗 CONECTAR CON BAP ID</button>
+      <button id="authGoogleBtn" class="fb-btn cyan" style="width:100%;padding:11px;font-size:6.5px;" onclick="authGoogleLogin()">CONTINUAR CON GOOGLE</button>
+      <div id="authProviderStatus" style="font-size:5.5px;color:#556;letter-spacing:1px;min-height:8px;text-align:center;line-height:1.6;"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin:2px 0;">
+        <div style="flex:1;height:1px;background:#1a2a3a;"></div>
+        <div style="font-size:5px;color:#445;letter-spacing:1px;">O USUARIO Y CONTRASEÑA</div>
+        <div style="flex:1;height:1px;background:#1a2a3a;"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:0;border-bottom:2px solid rgba(0,212,255,.15);margin-bottom:14px;">
+      <button id="authTabLogin" class="fb-btn cyan" style="flex:1;border-radius:0;border-color:transparent;border-bottom:3px solid #00d4ff;font-size:6.5px;" onclick="authShowTab('login')">INICIAR SESIÓN</button>
+      <button id="authTabReg" class="fb-btn gray" style="flex:1;border-radius:0;border-color:transparent;border-bottom:3px solid transparent;font-size:6.5px;" onclick="authShowTab('register')">CREAR CUENTA</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div>
+        <div class="fb-label">USUARIO</div>
+        <input id="authUserInput" class="fb-input" style="width:100%;box-sizing:border-box;margin-top:4px;" type="text" maxlength="16" autocomplete="username" placeholder="3-16 caracteres, sin espacios">
+      </div>
+      <div>
+        <div class="fb-label">CONTRASEÑA</div>
+        <input id="authPassInput" class="fb-input" style="width:100%;box-sizing:border-box;margin-top:4px;" type="password" maxlength="64" autocomplete="current-password" placeholder="Mínimo 6 caracteres" onkeydown="if(event.key==='Enter')authSubmit()">
+      </div>
+      <div id="authError" style="font-size:6px;color:#ff4444;letter-spacing:1px;min-height:8px;line-height:1.6;"></div>
+      <button id="authSubmitBtn" class="fb-btn green" style="width:100%;padding:11px;font-size:7px;" onclick="authSubmit()">INICIAR SESIÓN</button>
+      <button class="fb-btn gray" style="width:100%;padding:8px;font-size:6px;" onclick="authSkip()">JUGAR SIN CUENTA (no se guardará en la nube)</button>
+    </div>
+  </div>
+</div>
+
 <!-- MAIN MENU -->
 <div id="sMenu" class="scr">
   <img class="mTitleImg" src="https://chibi.iitranq.co.uk/DzAe9ADZ9uXt.png" alt="GRUDGEBALL">
@@ -1274,7 +1466,7 @@ body.mode-pc #sModes > *{
 
     <!-- BOTTOM BUTTONS -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:100%;padding-top:2px;">
-      <button class="mBtn p" onclick="show('sShop');switchShopTab('skins')" style="min-width:110px;">🎨 SKINS</button>
+      <button class="mBtn p" onclick="show('sShop');switchShopTab('chests')" style="min-width:110px;">🎁 TIENDA</button>
       <button class="mBtn y" id="charReadyBtn" onclick="charScreenReady()" style="min-width:160px;font-size:9px;" data-i18n="ready">✔ TO THE ARENA!</button>
     </div>
 
@@ -1285,7 +1477,7 @@ body.mode-pc #sModes > *{
 <div id="sCustomize" class="scr" style="display:none!important;"></div>
 
 <!-- TIENDA UNIFICADA: MEJORAS + SKINS -->
-<div id="sShop" class="scr">
+<div id="sShop" class="scr" style="overflow-y:auto;padding:0;justify-content:flex-start;align-items:center;">
 
   <!-- Header + Tabs: ambos quedan fijos arriba al hacer scroll, así el
        selector MEJORAS/SKINS nunca queda inalcanzable ("tapado") -->
@@ -1293,7 +1485,7 @@ body.mode-pc #sModes > *{
     <div class="shop-header">
       <div>
         <div style="font-size:11px;color:var(--B);text-shadow:0 0 12px var(--B);letter-spacing:2px;">🛒 TIENDA</div>
-        <div style="font-size:6px;color:#2a4a6a;letter-spacing:1px;margin-top:2px;">Lab de Skins · Personalización</div>
+        <div style="font-size:6px;color:#2a4a6a;letter-spacing:1px;margin-top:2px;">Mejoras · Balones · Cofres y Fichas</div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="font-size:8px;color:var(--Y);" id="shCoins">🪙 0</div>
@@ -1305,7 +1497,7 @@ body.mode-pc #sModes > *{
     <div class="shop-tabs" style="width:100%;display:flex;justify-content:center;">
       <div style="display:flex;width:100%;max-width:620px;">
         <button class="shop-tab active" id="shopTabUpg" onclick="switchShopTab('upg')">⚡ MEJORAS</button>
-        <button class="shop-tab skins-tab" id="shopTabSkins" onclick="switchShopTab('skins')">🎨 SKINS</button>
+        <button class="shop-tab" id="shopTabChests" onclick="switchShopTab('chests')">🎁 TIENDA</button>
       </div>
     </div>
   </div>
@@ -1427,8 +1619,8 @@ body.mode-pc #sModes > *{
   </div>
 
   <!-- Panel: SKINS (built dynamically) -->
-  <div class="shop-panel" id="shopPanelSkins" style="align-items:center;">
-    <div class="skins-content" id="custContent"></div>
+  <div class="shop-panel" id="shopPanelChests" style="align-items:center;">
+    <div class="skins-content" id="shopChestsContent"></div>
   </div>
 
 </div>
@@ -1695,6 +1887,7 @@ let sv={
   chests:0,                        // cofres sin abrir
   lastDailyChestTs:0,              // timestamp del último cofre diario reclamado
 };
+window.sv=sv; // ── FIX: exponer sv a window para que el módulo Firebase pueda leerlo/guardarlo ──
 // Costo en fichas para desbloquear un personaje, según su rareza
 // Lógica invertida: las fichas COMUNES son más fáciles de encontrar → se necesitan MÁS.
 // Las fichas LEGENDARIAS son muy raras de encontrar → se necesitan MENOS.
@@ -1734,6 +1927,7 @@ const ROLE_STAT_WEIGHTS={
   'SOPORTE':    {dmg:0,   def:0.60,spd:0,   heal:0.40},
   'APOYO':      {dmg:0,   def:0.40,spd:0,   heal:0.60},
   'CONTROL':    {dmg:0.60,def:0,   spd:0.40,heal:0},
+  'TANQUE':     {dmg:0.50,def:0.50,spd:0,   heal:0},
   'COMODÍN':    {dmg:0.25,def:0.25,spd:0.25,heal:0.25},
   'LEGENDARIO': {dmg:0.40,def:0.30,spd:0.30,heal:0},
 };
@@ -1742,7 +1936,7 @@ function getRoleWeights(role){return ROLE_STAT_WEIGHTS[role]||ROLE_WEIGHTS_DEFAU
 const RARITY_LABEL={common:'COMÚN',rare:'RARO',epic:'ÉPICO',legendary:'LEGENDARIO'};
 const RARITY_COLOR={common:'#8899aa',rare:'#3399ff',epic:'#cc44ff',legendary:'#ffaa00'};
 function loadSv(){
-  try{const d=localStorage.getItem(SK);if(d)sv={...sv,...JSON.parse(d)};}catch(e){}
+  try{const d=localStorage.getItem(SK);if(d)Object.assign(sv,JSON.parse(d));}catch(e){} // FIX: mutar en lugar de reemplazar, así window.sv sigue apuntando al mismo objeto
   if(!sv.unlockedChars)sv.unlockedChars=Object.entries(CHARS).filter(([k,c])=>c.unlocked).map(([k])=>k);
   selectedBallSkin=sv.equippedBall||'default';
   (sv.unlockedBalls||['default']).forEach(id=>{const b=BALL_SKINS.find(x=>x.id===id);if(b)b.unlocked=true;});
@@ -1758,10 +1952,11 @@ function saveSv(){
 }
 function switchShopTab(tab){
   document.getElementById('shopTabUpg').classList.toggle('active', tab==='upg');
-  document.getElementById('shopTabSkins').classList.toggle('active', tab==='skins');
+  document.getElementById('shopTabChests').classList.toggle('active', tab==='chests');
   document.getElementById('shopPanelUpg').classList.toggle('active', tab==='upg');
-  document.getElementById('shopPanelSkins').classList.toggle('active', tab==='skins');
-  if(tab==='skins') buildCustomize();
+  document.getElementById('shopPanelChests').classList.toggle('active', tab==='chests');
+  const sShopEl=$$('sShop');if(sShopEl)sShopEl.scrollTop=0;
+  if(tab==='chests') buildShopChests();
 }
 function switchCollTab(tab){
   document.getElementById('collTabChars').classList.toggle('active', tab==='chars');
@@ -1770,6 +1965,7 @@ function switchCollTab(tab){
   document.getElementById('collPanelChars').classList.toggle('active', tab==='chars');
   document.getElementById('collPanelBalls').classList.toggle('active', tab==='balls');
   document.getElementById('collPanelChests').classList.toggle('active', tab==='chests');
+  const sRosterEl=$$('sRoster');if(sRosterEl)sRosterEl.scrollTop=0;
   if(tab==='balls') buildCollectionBalls();
   if(tab==='chests') buildCollectionChests();
 }
@@ -1801,6 +1997,7 @@ function buildCollectionBalls(){
     card.style.setProperty('--rcol',rcol);
     card.innerHTML=`
       ${b.rarity?`<div class="ball-card-rarity-tab">${RARITY_LABEL[b.rarity]}</div>`:''}
+      ${b.imgUrl2?`<div style="position:absolute;top:2px;right:2px;font-size:4px;letter-spacing:.5px;background:rgba(122,42,138,.85);color:#fff;border-radius:4px;padding:1px 3px;z-index:2;">🧟 2 FASES</div>`:''}
       <img class="ball-card-img" src="${b.imgUrl||''}" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex';" alt="">
       <div class="img-fallback">${b.emoji||'⚪'}</div>
       ${!b.unlocked?`<div class="ball-card-lock"><span style="font-size:20px;">🔒</span></div>`:''}
@@ -1907,14 +2104,39 @@ function unlockBall(id){
   const need=BALL_RARITY_SHARD_COST[b.rarity];
   const have=sv.ballShards[id]||0;
   if(have<need){toast('Necesitas '+need+' Fichas '+b.name+' ('+have+'/'+need+') — consíguelas en Cofres','#ff4444');return;}
-  sv.ballShards[id]=have-need;b.unlocked=true;saveSv();toast('¡BALÓN '+b.name+' DESBLOQUEADO!','#ffe600');buildCustomize();buildCollectionBalls();
+  sv.ballShards[id]=have-need;b.unlocked=true;saveSv();toast('¡BALÓN '+b.name+' DESBLOQUEADO!','#ffe600');buildShopChests();buildCollectionBalls();
 }
-function equipBall(id){const b=BALL_SKINS.find(x=>x.id===id);if(!b||!b.unlocked){toast('Desbloquea primero');return;}selectedBallSkin=id;sv.equippedBall=id;saveSv();buildCustomize();}
+function equipBall(id){const b=BALL_SKINS.find(x=>x.id===id);if(!b||!b.unlocked){toast('Desbloquea primero');return;}selectedBallSkin=id;sv.equippedBall=id;saveSv();buildShopChests();}
 
 // ════════════════════════════════════════════════════════════
 // SISTEMA DE COFRES — fuente de Fichas de Personaje y de Balón
 // ════════════════════════════════════════════════════════════
 const CHEST_DAILY_MS=24*60*60*1000;
+// ── OFERTA DIARIA DE FICHAS: 3 fichas (personaje o balón) elegidas al azar,
+// fijas durante 24h (misma semilla = mismo día = misma oferta para todos). ──
+function _dailySeedDay(){return Math.floor(Date.now()/CHEST_DAILY_MS);}
+function _seededRandom(seed){
+  // PRNG simple determinístico (mulberry32) — mismo seed = misma secuencia
+  return function(){
+    seed|=0;seed=seed+0x6D2B79F5|0;
+    let t=Math.imul(seed^seed>>>15,1|seed);
+    t=t+Math.imul(t^t>>>7,61|t)^t;
+    return((t^t>>>14)>>>0)/4294967296;
+  };
+}
+function dailyShardOffers(){
+  const pool=[
+    ...Object.entries(CHARS).filter(([k,c])=>c.rarity).map(([k,c])=>({kind:'char',key:k,def:c})),
+    ...BALL_SKINS.filter(b=>b.rarity&&!b.eventOnly&&!b.charUnlock).map(b=>({kind:'ball',key:b.id,def:b})),
+  ];
+  const rng=_seededRandom(_dailySeedDay());
+  const shuffled=[...pool];
+  for(let i=shuffled.length-1;i>0;i--){
+    const j=Math.floor(rng()*(i+1));
+    [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
+  }
+  return shuffled.slice(0,3);
+}
 
 // ── Tipos de cofre ──────────────────────────────────────────
 // Cada tipo puede provenir de varias fuentes (ej. el Básico llega por diario
@@ -1927,6 +2149,39 @@ const CHEST_TYPES={
   premium:{id:'premium',name:'COFRE PREMIUM', icon:'🎁', col:'#ffaa00', desc:'2 recompensas · mejor probabilidad de épico y legendario',
            weightBoost:1},
 };
+// ── TIENDA: precio en monedas/tickets para comprar cofres directamente ──
+const CHEST_SHOP_PRICE={basic:{coins:300},premium:{tickets:15}};
+// ── TIENDA: precio por FICHA SUELTA (sin pasar por cofre), según rareza ──
+// Común/Rara siempre en monedas. Legendaria siempre en tickets.
+// Épica: 50/50 determinístico por clave (no aleatorio cada vez que se abre la tienda).
+const SHARD_SHOP_PRICE={common:{coins:15},rare:{coins:30},legendary:{tickets:12}};
+const SHARD_EPIC_PRICE_COINS={coins:70};
+const SHARD_EPIC_PRICE_TICKETS={tickets:6};
+// Hash estable (no random) para decidir si una clave épica específica usa monedas o tickets
+function _epicUsesCoins(key){
+  let h=0;for(let i=0;i<key.length;i++){h=(h*31+key.charCodeAt(i))|0;}
+  return Math.abs(h)%2===0;
+}
+function shardShopPrice(rarity,key){
+  if(rarity==='epic')return _epicUsesCoins(key)?SHARD_EPIC_PRICE_COINS:SHARD_EPIC_PRICE_TICKETS;
+  return SHARD_SHOP_PRICE[rarity]||SHARD_SHOP_PRICE.common;
+}
+function buyChestShop(type){
+  const price=CHEST_SHOP_PRICE[type];if(!price)return;
+  if(price.coins){if((sv.coins||0)<price.coins){toast('Necesitas 🪙'+price.coins,'#ff4444');return;}sv.coins-=price.coins;}
+  else if(price.tickets){if((sv.tickets||0)<price.tickets){toast('Necesitas 🎟'+price.tickets,'#ff4444');return;}sv.tickets-=price.tickets;}
+  addChest(type,1);saveSv();toast('¡'+CHEST_TYPES[type].name+' comprado!','#ffe600');buildShopChests();
+}
+function buyShard(kind,key){
+  const def=kind==='char'?CHARS[key]:BALL_SKINS.find(b=>b.id===key);
+  if(!def||!def.rarity)return;
+  const price=shardShopPrice(def.rarity,key);
+  if(price.coins){if((sv.coins||0)<price.coins){toast('Necesitas 🪙'+price.coins,'#ff4444');return;}sv.coins-=price.coins;}
+  else if(price.tickets){if((sv.tickets||0)<price.tickets){toast('Necesitas 🎟'+price.tickets,'#ff4444');return;}sv.tickets-=price.tickets;}
+  if(kind==='char'){sv.charShards=sv.charShards||{};sv.charShards[key]=(sv.charShards[key]||0)+1;}
+  else{sv.ballShards=sv.ballShards||{};sv.ballShards[key]=(sv.ballShards[key]||0)+1;}
+  saveSv();toast('+1 Ficha de '+(def.name||def.nameEs)+'!','#00ff88');buildShopChests();
+}
 function _chestInv(){
   sv.chestInventory=sv.chestInventory||{};
   // Migración única: si existe el contador viejo sv.chests (número plano),
@@ -2209,13 +2464,14 @@ const $$=id=>document.getElementById(id);
 function show(id){
   document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));
   $$(id).classList.add('on');
+  $$(id).scrollTop=0;
   const onMenu=id==='sMenu';[$$('mBtnTL'),$$('mBtnTR')].forEach(b=>{if(b)b.style.display=onMenu?'flex':'none';});
   if(id==='sRoster')buildRoster();
   if(id==='sModes'){updateStoryProgress();buildModeRoster();}
   if(id==='sChar')buildCharSelect();
-  if(id==='sCustomize'){show('sShop');switchShopTab('skins');return;}
+  if(id==='sCustomize'){show('sShop');switchShopTab('chests');return;}
   if(id==='sStoryArc')buildStoryArcScreen();
-  if(id==='sShop'){rebuildShop();if(document.getElementById('shopPanelSkins').classList.contains('active'))buildCustomize();}
+  if(id==='sShop'){rebuildShop();if(document.getElementById('shopPanelChests').classList.contains('active'))buildShopChests();}
   if(id==='sGame')stopMenuMusic();else{playMenuMusic();_resetArenaBg();}
 }
 // Muestra pantalla de carga brevemente antes de transicionar — da sensación de juego profesional
@@ -2349,7 +2605,9 @@ function showProfile(){
       </div>
       <div id="fbStatus" class="fb-status">${window._fbStatusMsg||(window._fbConfigured?'Conectando...':'Firebase no configurado (modo demo)')}</div>
     </div>
+    ${window._fbAuthMode !== 'bap' ? '<button id="profileBapBtn" class="fb-btn orange" style="width:100%;padding:11px;font-size:7px;" onclick="profileBapLogin()">🔗 CONECTAR CON BAP STUDIOS</button>' : ''}
     <button class="fb-btn green" style="width:100%;padding:11px;font-size:7px;" onclick="fbSyncNow()">SINCRONIZAR PROGRESO CON LA NUBE</button>
+    <button class="fb-btn gray" style="width:100%;padding:8px;font-size:6px;" onclick="fbLogout()">CERRAR SESIÓN</button>
     <div style="display:flex;gap:0;border-bottom:2px solid rgba(255,136,0,.15);">
       <button id="fbTabRank" class="fb-btn orange" style="flex:1;border-radius:0;border-color:transparent;border-bottom:3px solid #ff8800;font-size:5.5px;" onclick="fbShowTab('rank')">RANKED</button>
       <button id="fbTabInf" class="fb-btn gray" style="flex:1;border-radius:0;border-color:transparent;border-bottom:3px solid transparent;font-size:5.5px;" onclick="fbShowTab('inf')">INFINITO</button>
@@ -2371,6 +2629,7 @@ function showProfile(){
 function closeSettings(){$$('settingsModal').style.display='none';}
 function resetProgress(){
   sv={coins:0,tickets:0,lF:1,lV:1,lR:1,lB:1,unlockedChars:null,unlockedBalls:null,equippedBall:'default',wins:0,gamesPlayed:0,charLevels:{},charXp:{},charRanks:{},storyChapter:0,tournamentRound:0,gameMode:'quick',infiniteFloor:1,infiniteBest:0,challengeProgress:{},dailySeed:0,dailyDone:[],achievements:{},comboBest:0,storyProgress:{},charShards:{},ballShards:{},chests:0,lastDailyChestTs:0};
+  window.sv=sv; // FIX: re-sincronizar window.sv ya que aquí sv se reemplaza por un objeto nuevo
   // Re-sincroniza los flags .unlocked en memoria a su valor por defecto de cada definición
   Object.values(CHARS).forEach(c=>{c.unlocked=!!c._defaultUnlocked;});
   BALL_SKINS.forEach(b=>{b.unlocked=!!b._defaultUnlocked;});
@@ -2676,6 +2935,18 @@ const CHARS={
     sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png'),
     super:'TECH KWON DO',superFn:'superRigby',leaderBuff:'BUFF: Pases +50% velocidad'
   },
+  // DOUG — CLONADOR (Opción A: copiado fijo). Apareció en "Temp Check", se convierte
+  // en un clon idéntico a Rigby. Stats/super/leaderBuff iguales a Rigby por diseño.
+  // Usa temporalmente el arte de Rigby (Doug es un clon visual idéntico en el canon);
+  // reemplazar icon/img/shardImg/sprites si se consigue arte específico de Doug.
+  doug:{
+    name:'Doug',role:'VELOCIDAD',col:'#aa7733',unlocked:false,atq:3,def:1,spd:5,
+    icon:'https://chibi.iitranq.co.uk/bQdsQ2NRwJHo.jpg',
+    img:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',
+    rarity:'rare',rank:2,shardImg:'https://chibi.iitranq.co.uk/bQdsQ2NRwJHo.jpg',
+    sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png'),
+    super:'TECH KWON DO',superFn:'superRigby',leaderBuff:'BUFF: Pases +50% velocidad'
+  },
   future_skips:{
     name:'Skips Futuro',role:'DEFENSA',col:'#eeddaa',unlocked:false,atq:2,def:5,spd:2,
     icon:'https://chibi.iitranq.co.uk/HH0S5DVTkRWy.jpg',
@@ -2722,6 +2993,24 @@ const CHARS={
     rarity:'rare',rank:2,shardImg:'https://chibi.iitranq.co.uk/NWN0IQeLJJBy.jpg',
     sprites:mkSprites('https://chibi.iitranq.co.uk/PH3nL2rYl1zu.png'),
     super:'MORDO BLAST',superFn:'superMordecai',leaderBuff:'BUFF: Todo el equipo +1 daño'
+  },
+  // CLONE MORDECAI AND RIGBY — CLONADOR DOBLE (Opción A: copiado fijo).
+  // Aparecen en "Best Burger in the World", metidos en vidrio verde plano.
+  // Ocupan 1 solo slot de equipo/ficha/Colección (ver dualOf), pero en combate
+  // se expanden a 2 Fighters reales (clon-Mordecai + clon-Rigby), cada uno con
+  // vida reducida (dualHp) por ser de vidrio — de ahí el balance: 4 fighters
+  // en cancha, pero 2 de ellos mueren mucho más rápido que lo normal.
+  // Debilidad de vidrio (pendiente de implementar daño extra): lanzadores de
+  // rol ATAQUE/POTENCIA/TANQUE deberían romperlos más fácil — ver roleBonusParts.
+  clone_mordecai_rigby:{
+    name:'Clone Mordecai and Rigby',nameEs:'Clones de Mordecai y Rigby',role:'EQUILIBRIO',col:'#44ddaa',unlocked:false,
+    atq:4,def:1,spd:4, // estos stats no se usan en combate (es doble); quedan para mostrar en Colección
+    icon:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
+    img:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
+    rarity:'epic',rank:3,shardImg:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
+    sprites:mkSprites('https://chibi.iitranq.co.uk/AzGqed7GTFey.png'),
+    super:'MORDO BLAST + TECH KWON DO',superFn:null,leaderBuff:'BUFF: Todo el equipo +1 daño',
+    dualOf:['mordecai','rigby'],dualHp:2,isGlass:true
   },
   young_skips:{
     name:'Skips Joven',role:'DEFENSA',col:'#eeddaa',unlocked:false,atq:2,def:5,spd:2,
@@ -2779,6 +3068,7 @@ const ENEMY_DEFS=[
 const BALL_RARITY_SHARD_COST={common:12,rare:8,epic:5,legendary:3};
 
 const BALL_SKINS=[
+  // ── COMMON ──
   {id:'default_ball',name:'BALÓN CLÁSICO',col:'#ff5500',glowCol:'#ffea00',rarity:'common',unlocked:true,emoji:'🔴',imgUrl:'https://chibi.iitranq.co.uk/Kph7iBuNx5qy.png'},
   {id:'red_dodgeball',name:'BALÓN ROJO',col:'#ff3344',glowCol:'#ff8866',rarity:'common',unlocked:false,emoji:'🔴',imgUrl:'https://chibi.iitranq.co.uk/Ziuk0r3EI3ES.png'},
   {id:'green_ball',name:'BALÓN VERDE',col:'#33aa33',glowCol:'#99ff66',rarity:'common',unlocked:false,emoji:'💚',imgUrl:'https://chibi.iitranq.co.uk/ntFmkj5CVOgM.png'},
@@ -2792,22 +3082,28 @@ const BALL_SKINS=[
   {id:'glass_ball',name:'BALÓN DE CRISTAL',col:'#557788',glowCol:'#bbe8ff',rarity:'common',unlocked:false,emoji:'🔘',imgUrl:'https://chibi.iitranq.co.uk/0eMLocPMSPEg.png'},
   {id:'cyber_ball',name:'BALÓN CYBER',col:'#00ffff',glowCol:'#00aaff',rarity:'common',unlocked:false,emoji:'🔵',imgUrl:'https://chibi.iitranq.co.uk/C3iNbxHf9Rui.png'},
   {id:'electroshock_ball',name:'ELECTROSHOCK',col:'#ffff00',glowCol:'#aaffff',rarity:'common',unlocked:false,emoji:'⚡',imgUrl:'https://chibi.iitranq.co.uk/OLrJ1zWfbGjm.png'},
-  {id:'flash_ball',name:'FLASH BALL',col:'#aa1122',glowCol:'#ffdd44',rarity:'rare',unlocked:false,emoji:'⚡',imgUrl:'https://chibi.iitranq.co.uk/abFqLhfBsz1M.png'},
   {id:'lowpoly_ball',name:'BALÓN LOW POLY',col:'#88ccff',glowCol:'#aaffee',rarity:'common',unlocked:false,emoji:'🔷',imgUrl:'https://chibi.iitranq.co.uk/3aDSYMcyP9ao.png'},
+  {id:'flash_ball',name:'FLASH BALL',col:'#aa1122',glowCol:'#ffdd44',rarity:'common',unlocked:false,emoji:'⚡',imgUrl:'https://chibi.iitranq.co.uk/abFqLhfBsz1M.png'},
+  {id:'clone_ball',name:'BALÓN CLON',col:'#33cc66',glowCol:'#aaffcc',rarity:'common',unlocked:false,emoji:'👯',imgUrl:'https://chibi.iitranq.co.uk/Eu2xNngZ0Eak.png'},
+  // ── RARE ──
   {id:'ghost_ball',name:'BALÓN FANTASMA',col:'#aaddff',glowCol:'#ffffff',rarity:'rare',unlocked:false,emoji:'👻',imgUrl:'https://chibi.iitranq.co.uk/CQolODtxKOAU.png'},
   {id:'fire_ball',name:'BALÓN DE FUEGO',col:'#ff2200',glowCol:'#ff8800',rarity:'rare',unlocked:false,emoji:'🔥',imgUrl:'https://chibi.iitranq.co.uk/mNfxjAAJZ7FS.png'},
   {id:'ice_ball',name:'BALÓN DE HIELO',col:'#66ddff',glowCol:'#ffffff',rarity:'rare',unlocked:false,emoji:'❄️',imgUrl:'https://chibi.iitranq.co.uk/40259UCzTYAj.png'},
   {id:'vintage_ball',name:'BALÓN VINTAGE',col:'#cc9966',glowCol:'#ffddaa',rarity:'rare',unlocked:false,emoji:'📻',imgUrl:'https://chibi.iitranq.co.uk/8lZuNiCgbz2X.png'},
   {id:'galaxy_ball',name:'BALÓN GALAXIA',col:'#cc44ff',glowCol:'#ff44cc',rarity:'rare',unlocked:false,emoji:'🟣',imgUrl:'https://chibi.iitranq.co.uk/zorf4yXz2q7E.png'},
+  {id:'future_ball',name:'BALÓN DEL FUTURO',col:'#00e0ff',glowCol:'#0088ff',rarity:'rare',unlocked:false,emoji:'🔮',imgUrl:'https://chibi.iitranq.co.uk/aSCcP2Iil76t.png'},
+  // ── EPIC ──
   {id:'spike_ball',name:'BALÓN PÚAS',col:'#444444',glowCol:'#cccccc',rarity:'epic',unlocked:false,emoji:'🔘',imgUrl:'https://chibi.iitranq.co.uk/XTmsnPNQmP0T.png'},
   {id:'saturn_ball',name:'BALÓN SATURNO',col:'#cc9955',glowCol:'#66eecc',rarity:'epic',unlocked:false,emoji:'🪐',imgUrl:'https://chibi.iitranq.co.uk/3KGaOJOaGhZ2.png'},
   {id:'eight_ball',name:'BOLA 8',col:'#1a1a1a',glowCol:'#ffffff',rarity:'epic',unlocked:false,emoji:'🎱',imgUrl:'https://chibi.iitranq.co.uk/J8mgbl99my0M.png'},
   {id:'gold_ball',name:'BALÓN ORO',col:'#ffd700',glowCol:'#ffaa00',rarity:'epic',unlocked:false,emoji:'🟡',imgUrl:'https://chibi.iitranq.co.uk/oItH0GUhIOH8.png'},
   {id:'diamond_ball',name:'BALÓN DIAMANTE',col:'#a8e4ff',glowCol:'#ffffff',rarity:'epic',unlocked:false,emoji:'💎',imgUrl:'https://chibi.iitranq.co.uk/eRLGgfyMgTbc.png'},
+  // ── LEGENDARY ──
   {id:'chaosphere',name:'CHAOSPHERE',col:'#cc44ff',glowCol:'#ff00ff',rarity:'legendary',unlocked:false,emoji:'🌀',imgUrl:'https://chibi.iitranq.co.uk/XhP12zwmJBlh.png'},
-  // ── Exclusivas: se desbloquean automáticamente con un personaje, no se compran ──
+  // ── Exclusivas: se desbloquean automáticamente con un personaje o por evento, no se compran ──
   {id:'antiball',name:'ANTI-BALL',col:'#cc00ff',glowCol:'#440044',rarity:'legendary',unlocked:false,emoji:'🌑',imgUrl:'https://chibi.iitranq.co.uk/Vdz2MsjazEQc.png',charUnlock:'antipops'},
   {id:'popshead',name:'CABEZA DE POPS',col:'#ffe600',glowCol:'#fff7aa',rarity:'legendary',unlocked:false,emoji:'👑',imgUrl:'https://chibi.iitranq.co.uk/gD6MysKb4IlC.png',eventOnly:true},
+  {id:'thriller_ball',name:'THRILLER BALL',col:'#7a2a8a',glowCol:'#8aff44',rarity:'legendary',unlocked:false,emoji:'🧟',imgUrl:'https://chibi.iitranq.co.uk/o63l3soATTbl.png',imgUrl2:'https://chibi.iitranq.co.uk/1egzt4picgbe.png',phaseAt:2,eventOnly:true},
 ];
 // Captura el estado "unlocked" por defecto de cada balón (usado por resetProgress)
 BALL_SKINS.forEach(b=>{b._defaultUnlocked=!!b.unlocked;});
@@ -3355,32 +3651,61 @@ function buildLeaderBuff(){
   // Update the player buff panel
   const bd=$$('vsBuffDesc');if(bd&&leaderKey&&CHARS[leaderKey])bd.textContent=CHARS[leaderKey].leaderBuff.replace('BUFF: ','');
 }
-function buildCustomize(){
-  const cc=$$('custContent');if(!cc)return;
+function buildShopChests(){
+  const cc=$$('shopChestsContent');if(!cc)return;
   const custCoins=$$('shCoins');if(custCoins)custCoins.textContent='🪙 '+sv.coins+'  🎫 '+(sv.tickets||0);
   cc.innerHTML='';
 
-  // ── BALONES ──
-  const bSec=document.createElement('div');
-  bSec.innerHTML=`<div class="skins-section-title">⚽ SKINS DE BALÓN</div>`;
-  const bRow=document.createElement('div');bRow.className='ball-grid';
-  BALL_SKINS.forEach(b=>{
-    const active=selectedBallSkin===b.id;
+  // ── COFRES COMPRABLES ──
+  const chestSec=document.createElement('div');
+  chestSec.innerHTML=`<div class="skins-section-title">📦 COMPRAR COFRES</div>`;
+  const chestRow=document.createElement('div');chestRow.style.cssText='display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:18px;';
+  Object.values(CHEST_TYPES).forEach(def=>{
+    const price=CHEST_SHOP_PRICE[def.id];
+    const priceLabel=price.coins?'🪙 '+price.coins:'🎟 '+price.tickets;
+    const canAfford=price.coins?(sv.coins||0)>=price.coins:(sv.tickets||0)>=price.tickets;
     const card=document.createElement('div');
-    card.className='ball-card'+(active?' equipped':'')+(b.unlocked?'':' locked');
-    card.style.setProperty('--ball-col',b.col);
-    card.style.borderColor=active?b.col:'#1a1a2a';
+    card.style.cssText=`background:linear-gradient(160deg,${def.col}22,#0a0818);border:2px solid ${def.col}77;border-radius:16px;padding:16px;text-align:center;min-width:140px;max-width:160px;`;
     card.innerHTML=`
-      <img class="ball-card-img" src="${b.imgUrl||''}" onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='flex';" alt="">
-      <div class="img-fallback">${b.emoji||'⚪'}</div>
-      ${!b.unlocked?`<div class="ball-card-lock"><span style="font-size:20px;">🔒</span></div>`:''}
-      <div class="ball-card-name" style="color:${b.col};">${b.name}</div>
-      ${_ballStatusHtml(b,active)}`;
-    card.onclick=()=>{b.unlocked?equipBall(b.id):unlockBall(b.id);};
-    bRow.appendChild(card);
+      <div style="font-size:38px;line-height:1;">${def.icon}</div>
+      <div style="font-size:6.5px;color:${def.col};margin-top:8px;letter-spacing:.5px;">${def.name}</div>
+      <div style="font-size:4.5px;color:#778;margin-top:4px;line-height:1.5;">${def.desc}</div>
+      <button class="uBtn" style="margin-top:10px;width:100%;border-color:${canAfford?def.col:'#555'};color:${canAfford?def.col:'#aab'};${canAfford?'':'cursor:not-allowed;opacity:.7;'}" ${canAfford?'':'disabled'} onclick="buyChestShop('${def.id}')">${priceLabel}</button>`;
+    chestRow.appendChild(card);
   });
-  bSec.appendChild(bRow);cc.appendChild(bSec);
-  // (Sistema de skins por personaje eliminado: cada personaje usa su propio icon/img directamente)
+  chestSec.appendChild(chestRow);cc.appendChild(chestSec);
+
+  // ── OFERTA DIARIA DE FICHAS (rota cada 24h) ──
+  const msLeft=CHEST_DAILY_MS-(Date.now()%CHEST_DAILY_MS);
+  const hLeft=Math.floor(msLeft/3600000),mLeft=Math.floor((msLeft%3600000)/60000);
+  const offerSec=document.createElement('div');
+  offerSec.innerHTML=`<div class="skins-section-title">🎲 OFERTA DEL DÍA <span style="font-size:4px;color:#667;margin-left:auto;">renueva en ${hLeft}h ${mLeft}m</span></div>`;
+  cc.appendChild(offerSec);
+  cc.appendChild(_shardShopSection(null,null,dailyShardOffers()));
+}
+function _shardShopSection(title,kindFixed,items){
+  const sec=document.createElement('div');
+  if(title)sec.innerHTML=`<div class="skins-section-title">${title}</div>`;
+  const row=document.createElement('div');row.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;';
+  items.forEach(item=>{
+    const kind=item.kind||kindFixed;const key=item.key;const def=item.def;
+    const rcol=RARITY_COLOR[def.rarity];
+    const price=shardShopPrice(def.rarity,key);
+    const priceLabel=price.coins?'🪙'+price.coins:'🎟'+price.tickets;
+    const canAfford=price.coins?(sv.coins||0)>=price.coins:(sv.tickets||0)>=price.tickets;
+    const img=kind==='char'?(def.shardImg||def.icon||def.img):def.imgUrl;
+    const card=document.createElement('div');
+    card.style.cssText=`background:#0d0d1c;border:2px solid ${rcol}55;border-radius:12px;padding:8px;text-align:center;width:88px;`;
+    card.innerHTML=`
+      <img src="${img||''}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+      <div class="img-fallback" style="display:none;width:100%;aspect-ratio:1;height:auto;border-radius:8px;font-size:24px;">${kind==='char'?'🧍':'⚪'}</div>
+      <div style="font-size:4.5px;color:${rcol};margin-top:5px;letter-spacing:.3px;">${RARITY_LABEL[def.rarity]}</div>
+      <div style="font-size:4px;color:#889;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${def.name||def.nameEs}</div>
+      <button class="uBtn" style="margin-top:5px;width:100%;font-size:4.5px;padding:5px 2px;border-color:${canAfford?rcol:'#555'};color:${canAfford?rcol:'#aab'};${canAfford?'':'cursor:not-allowed;opacity:.7;'}" ${canAfford?'':'disabled'} onclick="buyShard('${kind}','${key}')">${priceLabel}</button>`;
+    row.appendChild(card);
+  });
+  sec.appendChild(row);
+  return sec;
 }
 
 // ═══════════════════ CANVAS ═══════════════════
@@ -3409,6 +3734,32 @@ function setupArena(t){
   if(t==='multicannon'||t==='mixed'){multicannon.active=true;multicannon.cooldown=300;}
   if(t==='meteor'){meteorShower.active=true;meteorShower.timer=180+Math.random()*120;}
   if(t==='gravity'){gravityShift.active=true;gravityShift.timer=200+Math.random()*150;gravityShift.dir=Math.random()<.5?1:-1;}
+}
+
+// ── Equipo: expande personajes "dobles" (1 slot lógico = 2 Fighters reales) ──
+// Un personaje doble define dualOf:['key1','key2'] en su ficha de CHARS.
+// Ocupa 1 solo slot de selectedChars/Colección/fichas, pero en combate aporta
+// 2 Fighters reales (normalmente más frágiles, ver maxHpOverride por personaje).
+function _spawnTeamFighters(keys,side){
+  const expanded=[]; // [{key, defObj}] — ya expandido, 1 o 2 entradas por slot
+  keys.forEach(k=>{
+    const def=CHARS[k];
+    if(def&&def.dualOf&&def.dualOf.length===2){
+      def.dualOf.forEach(dk=>{
+        const dualDef=CHARS[dk];
+        if(dualDef)expanded.push({key:dk,defObj:dualDef,hpOverride:def.dualHp||null});
+      });
+    }else if(def){
+      expanded.push({key:k,defObj:def,hpOverride:null});
+    }
+  });
+  const n=expanded.length||1;
+  const topY=40,botY=310; // mismo rango vertical que las posiciones originales [40,180,310]
+  const x=side==='l'?52:708;
+  return expanded.map((e,i)=>{
+    const y=n===1?(topY+botY)/2:topY+(botY-topY)*(i/(n-1));
+    return new Fighter(e.key,e.defObj,x,y,side,e.hpOverride||undefined);
+  });
 }
 
 // ── Fighter class ────────────────────────────────────────────────────────────
@@ -3629,8 +3980,8 @@ function startBattle(){
   const _bgId=ARENA_BG_MAP[arenaType]||'park';
   const _bgIdx=ARENA_BACKGROUNDS.findIndex(b=>b.id===_bgId);
   currentBgIndex=_bgIdx>=0?_bgIdx:0;currentBgImg=null;currentFloorImg=null;
-  const selArr=[...selectedChars].slice(0,3);const positions=[[52,40],[52,180],[52,310]];
-  teamJ=selArr.map((k,i)=>new Fighter(k,CHARS[k],positions[i][0],positions[i][1],'l'));
+  const selArr=[...selectedChars].slice(0,3);
+  teamJ=_spawnTeamFighters(selArr,'l');
   const epos=[[708,40],[708,180],[708,310]];
   if(sv.gameMode==='story'&&sv._storyEnemyKey){
     const eKey=sv._storyEnemyKey,eCount=Math.min(sv._storyEnemyCount||3,3);
@@ -3650,7 +4001,7 @@ function startBattle(){
   }else if(isVersus()&&sv._versusJ2Chars&&sv._versusJ2Chars.length){
     // Versus: use J2's chosen characters from CHARS (same pool as J1)
     const j2arr=sv._versusJ2Chars.slice(0,3);
-    teamE=j2arr.map((k,i)=>new Fighter(k,CHARS[k],epos[i][0],epos[i][1],'r'));
+    teamE=_spawnTeamFighters(j2arr,'r');
     currentBgIndex=ARENA_BACKGROUNDS.findIndex(b=>b.id===(ARENA_BG_MAP[arenaType]||'park'));if(currentBgIndex<0)currentBgIndex=0;currentBgImg=null;currentFloorImg=null;
   }else{
     const shuffled=[...ENEMY_DEFS].sort(()=>Math.random()-.5).slice(0,3);
@@ -3702,11 +4053,12 @@ function checkBallPickupPowerup(){if(!floorPowerups.length)return;for(let i=floo
 function applyPowerup(def){sfxPwup();bStats.pwup++;showPowerup(def.name+' — '+def.desc,def.col);if(def.id==='fireball'){ball.type='fireball';activePowerup=def;}else if(def.id==='blastball'){ball.type='blastball';activePowerup=def;}else if(def.id==='poisonball'){ball.type='poisonball';activePowerup=def;}else if(def.id==='speedball'){ball.type='speedball';activePowerup=def;}else if(def.id==='armor'){armorShield=def.duration;teamJ.filter(j=>j.alive).forEach(j=>j.armor=def.duration);spawnFloat('ARMADURA!',W/4,H/2,'#aaaaaa');}else if(def.id==='heal'){const target=ball.owner||teamJ.find(j=>j.alive);if(target)target.heal(1);}else if(def.id==='rageboost'){addRage('j',40);spawnFloat('+RABIA!',W/4,H/2,'#cc44ff');}$$('pwupDisplay').textContent=activePowerup?activePowerup.name+' ACTIVO':'';}
 function updHUD(){
   const jv=teamJ.filter(j=>j.alive).length,ev=teamE.filter(j=>j.alive).length;
+  const jTotal=teamJ.length||3,eTotal=teamE.length||3;
   if(isVersus()){
-    $$('hudL').textContent='J1 '+'★'.repeat(jv)+'☆'.repeat(3-jv);
-    $$('hudR').textContent='★'.repeat(ev)+'☆'.repeat(3-ev)+' J2';
+    $$('hudL').textContent='J1 '+'★'.repeat(jv)+'☆'.repeat(Math.max(0,jTotal-jv));
+    $$('hudR').textContent='★'.repeat(ev)+'☆'.repeat(Math.max(0,eTotal-ev))+' J2';
   }else{
-    $$('hudL').textContent='PARQUE '+'★'.repeat(jv)+'☆'.repeat(3-jv);$$('hudR').textContent='★'.repeat(ev)+'☆'.repeat(3-ev)+' RIVAL';
+    $$('hudL').textContent='PARQUE '+'★'.repeat(jv)+'☆'.repeat(Math.max(0,jTotal-jv));$$('hudR').textContent='★'.repeat(ev)+'☆'.repeat(Math.max(0,eTotal-ev))+' RIVAL';
   }
   const _d=Math.min(10,Math.round(1+(sv.wins||0)*0.4));const _de=$$('diffBadge');if(_de){_de.textContent=isVersus()?'VS':('DIF '+_d);_de.style.color=isVersus()?'#00ff88':(_d>=8?'#ff4444':_d>=5?'#ff8800':'#445566');}
   $$('rJ').style.width=rageJ+'%';$$('rJpct').textContent=Math.round(rageJ)+'%';$$('rE').style.width=rageE+'%';$$('rEpct').textContent=Math.round(rageE)+'%';
@@ -6447,7 +6799,7 @@ function drawScene(){
 const ballImgCache={};
 function getBallImg(url){if(!url)return null;const p=proxyUrl(url);if(ballImgCache[p])return ballImgCache[p];const i=new Image();i.crossOrigin='anonymous';i.src=p;ballImgCache[p]=i;return i;}
 // Preload ball images on boot
-function preloadBallImgs(){BALL_SKINS.forEach(b=>{if(b.imgUrl)getBallImg(b.imgUrl);});}
+function preloadBallImgs(){BALL_SKINS.forEach(b=>{if(b.imgUrl)getBallImg(b.imgUrl);if(b.imgUrl2)getBallImg(b.imgUrl2);});}
 
 function drawBall(){
   // Draw ball if: in flight, or held by a living owner, or sitting on the ground after a kill
@@ -6473,9 +6825,12 @@ function drawBall(){
     }
   }
 
-  // Get current ball skin image
+  // Get current ball skin image — algunos balones (ej. Thriller Ball) tienen
+  // 2 fases/imágenes que cambian según el nivel de carga del tiro.
   const activeSkin=BALL_SKINS.find(s=>s.id===selectedBallSkin)||BALL_SKINS[0];
-  const ballImg=activeSkin.imgUrl?getBallImg(activeSkin.imgUrl):null;
+  const usePhase2=activeSkin.imgUrl2&&ball.charge>=(activeSkin.phaseAt??2);
+  const activeUrl=usePhase2?activeSkin.imgUrl2:activeSkin.imgUrl;
+  const ballImg=activeUrl?getBallImg(activeUrl):null;
 
   ctx.save();
   // Outer glow
@@ -6927,25 +7282,6 @@ if('serviceWorker' in navigator && _swAllowed){
     }).catch(err=>console.warn('SW registration failed:',err));
   });
 }
-
-// ── PWA: Install prompt ───────────────────────────────────
-let _pwaPrompt=null;
-window.addEventListener('beforeinstallprompt',(e)=>{
-  e.preventDefault();_pwaPrompt=e;
-  // Show install button in menu if not already installed
-  setTimeout(()=>{
-    const menu=$$('sMenu');
-    if(!menu||$$('pwaInstallBtn'))return;
-    const btn=document.createElement('button');
-    btn.id='pwaInstallBtn';
-    btn.textContent='📲 INSTALAR COMO APP';
-    btn.style.cssText='font-family:"Press Start 2P",monospace;font-size:7px;padding:10px 18px;border:2px solid #00ff88;color:#00ff88;background:rgba(0,30,10,.7);cursor:pointer;border-radius:8px;position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:800;letter-spacing:1px;transition:all .2s;white-space:nowrap;';
-    btn.onmouseenter=()=>btn.style.background='rgba(0,60,20,.9)';
-    btn.onmouseleave=()=>btn.style.background='rgba(0,30,10,.7)';
-    btn.onclick=()=>{if(_pwaPrompt){_pwaPrompt.prompt();_pwaPrompt.userChoice.then(()=>{_pwaPrompt=null;btn.remove();});}};
-    document.body.appendChild(btn);
-  },2000);
-});
 </script>
 
 <!-- CHEST OPENING OVERLAY -->
@@ -7059,6 +7395,127 @@ function fbSaveName() {
   // Re-subir con nuevo nombre si ya hay pts
   if (window._fbSubmitRank && window.sv && window.sv.onlineRank)
     window._fbSubmitRank(window.sv.onlineRank.pts || 0);
+}
+
+// ══════════════════════════════════════════════════════════
+//  AUTH GATE — Google / BAP ID / usuario+contraseña
+//  (reemplaza la auth anónima que generaba users basura)
+// ══════════════════════════════════════════════════════════
+let _authMode = 'login'; // 'login' | 'register'
+
+window._fbShowAuthGate = function() {
+  try { if (sessionStorage.getItem('gb_authSkip')) return; } catch(e) {}
+  const m = document.getElementById('authGateModal');
+  if (m) m.style.display = 'flex';
+  try {
+    const last = localStorage.getItem('gb_fbname');
+    if (last) { const ui = document.getElementById('authUserInput'); if (ui) ui.value = last; }
+  } catch(e) {}
+  authShowTab('login');
+  const st = document.getElementById('authProviderStatus');
+  if (st) st.textContent = '';
+};
+
+window._fbHideAuthGate = function() {
+  const m = document.getElementById('authGateModal');
+  if (m) m.style.display = 'none';
+};
+
+function authShowTab(mode) {
+  _authMode = mode;
+  const tl = document.getElementById('authTabLogin');
+  const tr = document.getElementById('authTabReg');
+  const submitBtn = document.getElementById('authSubmitBtn');
+  const err = document.getElementById('authError');
+  if (err) err.textContent = '';
+  if (tl) { tl.style.borderBottomColor = mode === 'login' ? '#00d4ff' : 'transparent'; tl.style.color = mode === 'login' ? '#00d4ff' : '#555'; }
+  if (tr) { tr.style.borderBottomColor = mode === 'register' ? '#00d4ff' : 'transparent'; tr.style.color = mode === 'register' ? '#00d4ff' : '#555'; }
+  if (submitBtn) submitBtn.textContent = mode === 'login' ? 'INICIAR SESIÓN' : 'CREAR CUENTA';
+}
+
+async function authSubmit() {
+  const u = document.getElementById('authUserInput');
+  const p = document.getElementById('authPassInput');
+  const err = document.getElementById('authError');
+  const btn = document.getElementById('authSubmitBtn');
+  const username = (u && u.value || '').trim();
+  const password = (p && p.value || '');
+  if (err) err.textContent = '';
+  if (!window._fbRegister || !window._fbLogin) {
+    if (err) err.textContent = 'Firebase no disponible.';
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  const fn = _authMode === 'login' ? window._fbLogin : window._fbRegister;
+  const res = await fn(username, password);
+  if (btn) { btn.disabled = false; btn.textContent = _authMode === 'login' ? 'INICIAR SESIÓN' : 'CREAR CUENTA'; }
+  if (!res || !res.ok) {
+    if (err) err.textContent = (res && res.error) || 'Error desconocido';
+    return;
+  }
+  toast(_authMode === 'login' ? '¡Bienvenido de nuevo!' : '¡Cuenta creada!', '#00ff88');
+  // onAuthStateChanged se encarga de ocultar el modal y cargar el progreso
+}
+
+async function authGoogleLogin() {
+  const st = document.getElementById('authProviderStatus');
+  const btn = document.getElementById('authGoogleBtn');
+  if (!window._fbGoogleLogin) { if (st) st.textContent = 'Firebase no disponible.'; return; }
+  if (btn) btn.disabled = true;
+  if (st) { st.style.color = '#556'; st.textContent = 'Abriendo Google...'; }
+  const res = await window._fbGoogleLogin();
+  if (btn) btn.disabled = false;
+  if (!res || !res.ok) {
+    if (st) { st.style.color = '#ff4444'; st.textContent = (res && res.error) || 'Error al iniciar sesión.'; }
+    return;
+  }
+  toast('¡Conectado con Google!', '#00ff88');
+}
+
+async function authBapLogin() {
+  const st = document.getElementById('authProviderStatus');
+  const btn = document.getElementById('authBapBtn');
+  if (!window._fbBapLogin) { if (st) st.textContent = 'Firebase no disponible.'; return; }
+  if (btn) btn.disabled = true;
+  if (st) { st.style.color = '#556'; st.textContent = 'Esperando BAP ID...'; }
+  const res = await window._fbBapLogin();
+  if (btn) btn.disabled = false;
+  if (!res || !res.ok) {
+    if (st) { st.style.color = '#ff4444'; st.textContent = (res && res.error) || 'No se pudo conectar con BAP ID.'; }
+    return;
+  }
+  if (st) st.textContent = '';
+  toast('¡Conectado con BAP ID!', '#00ff88');
+}
+
+// Igual que authBapLogin pero invocado desde el modal de Perfil/Ajustes
+// (cuando el jugador ya está jugando con Google/usuario/sin cuenta y
+// quiere vincular o cambiar a BAP Studios).
+async function profileBapLogin() {
+  const btn = document.getElementById('profileBapBtn');
+  if (!window._fbBapLogin) { toast('Firebase no disponible.', '#ff4444'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'CONECTANDO...'; }
+  const res = await window._fbBapLogin();
+  if (btn) { btn.disabled = false; btn.textContent = '🔗 CONECTAR CON BAP STUDIOS'; }
+  if (!res || !res.ok) {
+    toast((res && res.error) || 'No se pudo conectar con BAP ID.', '#ff4444');
+    return;
+  }
+  toast('¡Conectado con BAP Studios!', '#00ff88');
+  showProfile(); // re-renderizar para ocultar el botón y reflejar el nuevo estado
+}
+
+function authSkip() {
+  try { sessionStorage.setItem('gb_authSkip', '1'); } catch(e) {}
+  const m = document.getElementById('authGateModal');
+  if (m) m.style.display = 'none';
+  toast('Jugando sin cuenta — el progreso solo se guarda en este navegador', '#ffaa00');
+}
+
+function fbLogout() {
+  if (window._fbLogout) window._fbLogout();
+  closeProfile();
+  toast('Sesión cerrada', '#ff8800');
 }
 
 function fbSyncNow() {
