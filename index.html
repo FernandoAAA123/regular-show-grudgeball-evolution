@@ -2882,7 +2882,7 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/d/d4/Hi_Five_Ghost_character.png/revision/latest/scale-to-width-down/200',    // hurt
       'https://static.wikia.nocookie.net/regularshow/images/d/d4/Hi_Five_Ghost_character.png/revision/latest/scale-to-width-down/200'     // super
     ),
-    super:'GHOST PASS',superFn:'superHifive',leaderBuff:'BUFF: Pases son imbloqueables'
+    super:'GHOST PASS',superFn:'superHifive',leaderBuff:'BUFF: Pases +50% velocidad'
   },
   eileen:{
     name:'Eileen',role:'APOYO',col:'#ff8899',unlocked:false,atq:2,def:3,spd:5,
@@ -2991,7 +2991,7 @@ const CHARS={
     super:'TECH HACK',superFn:'superTechmo',leaderBuff:'BUFF: Desactiva 1 super enemigo al inicio'
   },
   audrey:{
-    name:'Audrey',role:'ATAQUE',col:'#ff88bb',unlocked:false,atq:4,def:2,spd:4,
+    name:'Audrey',role:'APOYO',col:'#ff88bb',unlocked:false,atq:2,def:4,spd:3,
     icon:null,
     img:'https://static.wikia.nocookie.net/regularshow/images/8/8c/Audrey_character.png/revision/latest/scale-to-width-down/200',
     rarity:'common',rank:1,shardImg:'https://static.wikia.nocookie.net/regularshow/images/8/8c/Audrey_character.png/revision/latest/scale-to-width-down/200',
@@ -3003,7 +3003,7 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/8/8c/Audrey_character.png/revision/latest/scale-to-width-down/200',
       'https://static.wikia.nocookie.net/regularshow/images/8/8c/Audrey_character.png/revision/latest/scale-to-width-down/200'
     ),
-    super:'EAGLE DIVE',superFn:'superAudrey',leaderBuff:'BUFF: Primer tiro sin posibilidad de contra'
+    super:'CALMING PRESENCE',superFn:'superAudrey',leaderBuff:'BUFF: Primer tiro sin posibilidad de contra'
   },
   // FUTURE VARIANTS
   future_mordecai:{
@@ -3023,24 +3023,6 @@ const CHARS={
     rarity:'common',rank:1,shardImg:'https://chibi.iitranq.co.uk/YbwhYt5gMKJw.jpg',
     sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png'),
     super:'TECH KWON DO',superFn:'superRigby',leaderBuff:'BUFF: Pases +50% velocidad'
-  },
-  // DOUG — CLONADOR (Opción A: copiado fijo). Apareció en "Temp Check", se convierte
-  // en un clon idéntico a Rigby. Stats/super/leaderBuff iguales a Rigby por diseño.
-  // Usa temporalmente el arte de Rigby (Doug es un clon visual idéntico en el canon);
-  // reemplazar icon/img/shardImg/sprites si se consigue arte específico de Doug.
-  // DOUG — CLONADOR DE COPIADO DIN\u00c1MICO (Opción B). Apareció en "Temp Check".
-  // Stats base propios y discretos; su poder real está en su super (superDoug),
-  // que copia stats/rango/super del Rigby del equipo RIVAL al momento de usarse
-  // (prioriza 'rigby' exacto, luego cualquier variante, y si no hay ninguno
-  // copia a un rival aleatorio). Antes de usar su super, juega como un personaje
-  // normal con estos stats base.
-  doug:{
-    name:'Doug',role:'VELOCIDAD',col:'#aa7733',unlocked:false,atq:3,def:1,spd:4,
-    icon:'https://chibi.iitranq.co.uk/bQdsQ2NRwJHo.jpg',
-    img:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',
-    rarity:'rare',rank:2,shardImg:'https://chibi.iitranq.co.uk/bQdsQ2NRwJHo.jpg',
-    sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png'),
-    super:'COPIA DE RIGBY',superFn:'superDoug',leaderBuff:'BUFF: Pases +30% velocidad'
   },
   future_skips:{
     baseChar:'skips',
@@ -3083,7 +3065,6 @@ const CHARS={
     ),
     super:'TOWER POWER',superFn:'superMuscleman',leaderBuff:'BUFF: Todo el equipo +1 daño'
   },
-  // MORDECAI BOTADO — antes era una skin, ahora personaje independiente (Raro)
   dumped_mordecai:{
     baseChar:'mordecai',
     name:'Mordecai Botado',role:'ATAQUE',col:'#00c8ff',unlocked:false,atq:4,def:2,spd:3,
@@ -3093,24 +3074,6 @@ const CHARS={
     sprites:mkSprites('https://chibi.iitranq.co.uk/PH3nL2rYl1zu.png'),
     super:'MORDO BLAST',superFn:'superMordecai',leaderBuff:'BUFF: Todo el equipo +1 daño'
   },
-  // CLONE MORDECAI AND RIGBY — CLONADOR DOBLE (Opción A: copiado fijo).
-  // Aparecen en "Best Burger in the World", metidos en vidrio verde plano.
-  // Ocupan 1 solo slot de equipo/ficha/Colección (ver dualOf), pero en combate
-  // se expanden a 2 Fighters reales (clon-Mordecai + clon-Rigby), cada uno con
-  // vida reducida (dualHp) por ser de vidrio — de ahí el balance: 4 fighters
-  // en cancha, pero 2 de ellos mueren mucho más rápido que lo normal.
-  // Debilidad de vidrio (pendiente de implementar daño extra): lanzadores de
-  // rol ATAQUE/POTENCIA/TANQUE deberían romperlos más fácil — ver roleBonusParts.
-  clone_mordecai_rigby:{
-    name:'Clone Mordecai and Rigby',nameEs:'Clones de Mordecai y Rigby',role:'EQUILIBRIO',col:'#44ddaa',unlocked:false,
-    atq:4,def:1,spd:4, // estos stats no se usan en combate (es doble); quedan para mostrar en Colección
-    icon:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
-    img:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
-    rarity:'epic',rank:3,shardImg:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
-    sprites:mkSprites('https://chibi.iitranq.co.uk/AzGqed7GTFey.png'),
-    super:'DOBLE VIDRIO',superFn:'superCloneMordecaiRigby',leaderBuff:'BUFF: Todo el equipo +1 daño',
-    dualOf:['mordecai','rigby'],dualHp:2,isGlass:true
-  },
   young_skips:{
     baseChar:'skips',
     name:'Skips Joven',role:'DEFENSA',col:'#eeddaa',unlocked:false,atq:2,def:5,spd:2,
@@ -3119,6 +3082,30 @@ const CHARS={
     rarity:'common',rank:1,shardImg:'https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200',
     sprites:mkSprites('https://static.wikia.nocookie.net/regularshow/images/c/c4/Young_Skips.png/revision/latest/scale-to-width-down/200'),
     super:'BIONIC BARRIER',superFn:'superSkips',leaderBuff:'BUFF: Ventana de bloqueo x2'
+  },
+  doug:{
+    name:'Doug',role:'VELOCIDAD',col:'#aa7733',unlocked:false,atq:3,def:1,spd:4,
+    icon:'https://chibi.iitranq.co.uk/bQdsQ2NRwJHo.jpg',
+    img:'https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png',
+    rarity:'rare',rank:2,shardImg:'https://chibi.iitranq.co.uk/bQdsQ2NRwJHo.jpg',
+    sprites:mkSprites('https://chibi.iitranq.co.uk/GwVnqPjndnpJ.png'),
+    super:'COPIA DE RIGBY',superFn:'superDoug',leaderBuff:'BUFF: Pases +30% velocidad'
+  },
+  holomordecai_and_holorigby:{
+    name:'Holo-Mordecai and Holo-Rigby',nameEs:'Clones de Mordecai y Rigby',role:'EQUILIBRIO',col:'#44ddaa',unlocked:false,
+    atq:4,def:1,spd:4, // estos stats no se usan en combate (es doble); quedan para mostrar en Colección
+    icon:'https://chibi.iitranq.co.uk/aEdvFaKhmk7Y.jpg',
+    img:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
+    rarity:'epic',rank:3,shardImg:'https://chibi.iitranq.co.uk/AzGqed7GTFey.png',
+    sprites:mkSprites('https://chibi.iitranq.co.uk/AzGqed7GTFey.png'),
+    super:'HOLO-DOBLE',superFn:'superCloneMordecaiRigby',leaderBuff:'BUFF: Todo el equipo +2',
+    dualOf:['mordecai','rigby'],dualHp:2,isGlass:true,
+    // Imágenes holográficas propias de cada mitad (sin sprites de animación —
+    // flotan inclinados, ver _loadSprite/draw en Fighter para el efecto de inclinación).
+    dualImgs:{
+      mordecai:'https://chibi.iitranq.co.uk/sNtlzJdeBeEG.png',
+      rigby:'https://chibi.iitranq.co.uk/fYkinbUnBHXl.png'
+    }
   },
   gc:{
     name:'Guardián',role:'LEGENDARIO',col:'#00ffcc',unlocked:false,atq:4,def:4,spd:4,
@@ -3198,6 +3185,7 @@ const BALL_SKINS=[
   {id:'eight_ball',name:'BOLA 8',col:'#1a1a1a',glowCol:'#ffffff',rarity:'epic',unlocked:false,emoji:'🎱',imgUrl:'https://chibi.iitranq.co.uk/J8mgbl99my0M.png'},
   {id:'gold_ball',name:'BALÓN ORO',col:'#ffd700',glowCol:'#ffaa00',rarity:'epic',unlocked:false,emoji:'🟡',imgUrl:'https://chibi.iitranq.co.uk/oItH0GUhIOH8.png'},
   {id:'diamond_ball',name:'BALÓN DIAMANTE',col:'#a8e4ff',glowCol:'#ffffff',rarity:'epic',unlocked:false,emoji:'💎',imgUrl:'https://chibi.iitranq.co.uk/eRLGgfyMgTbc.png'},
+  {id:'evil_ball',name:'EVIL BALL',col:'#ff1133',glowCol:'#ff3355',rarity:'epic',unlocked:false,emoji:'😈',imgUrl:'https://chibi.iitranq.co.uk/5i3pqMEY0YPd.png',isEvil:true},
   // ── LEGENDARY ──
   {id:'chaosphere',name:'CHAOSPHERE',col:'#cc44ff',glowCol:'#ff00ff',rarity:'legendary',unlocked:false,emoji:'🌀',imgUrl:'https://chibi.iitranq.co.uk/XhP12zwmJBlh.png'},
   // ── Exclusivas: se desbloquean automáticamente con un personaje o por evento, no se compran ──
@@ -3864,7 +3852,12 @@ function _spawnTeamFighters(keys,side){
       def.dualOf.forEach(dk=>{
         const dualDef=CHARS[dk];
         if(dualDef){
-          const overriddenDef={...dualDef,super:def.super,superFn:def.superFn};
+          // Si el doble define dualImgs, cada mitad usa su propia imagen holográfica
+          // estática (sin sprites de animación) en vez de heredar el sprite del original.
+          const holoImg=def.dualImgs&&def.dualImgs[dk];
+          const overriddenDef=holoImg
+            ?{...dualDef,super:def.super,superFn:def.superFn,icon:holoImg,img:holoImg,sprites:null,isHolo:true}
+            :{...dualDef,super:def.super,superFn:def.superFn};
           expanded.push({key:dk,defObj:overriddenDef,hpOverride:def.dualHp||null,sharedSuperState});
         }
       });
@@ -3888,6 +3881,7 @@ function _spawnTeamFighters(keys,side){
 class Fighter{
   constructor(key,defObj,x,y,side,maxHpOverride,statBoost){
     this.key=key;this.name=defObj.name;this.nameEs=defObj.nameEs||null;this.col=defObj.col;this.superName=defObj.super||'SUPER';this.superFn=defObj.superFn||null;
+    this.isHolo=!!defObj.isHolo;
     this.x=x;this.y=y;
     // ── SQUARE dimensions ──
     this.w=60;this.h=60;
@@ -3994,6 +3988,9 @@ class Fighter{
     const bob=Math.sin(this.idle)*2,jy=this.jumpH,dx=this.x,dy=this.y-jy+bob,cx=dx+this.w/2;c.save();
     // Drag tilt: lean forward slightly while being dragged
     if(this.isDragged){const tilt=(this.side==='l'?1:-1)*0.18*Math.sin(Date.now()/120);c.translate(cx,dy+this.h/2);c.rotate(tilt);c.translate(-cx,-(dy+this.h/2));}
+    // Holo tilt: los clones holográficos (Holo-Mordecai/Holo-Rigby) flotan ligeramente
+    // inclinados, con un leve balanceo — no tienen sprites de animación normales.
+    else if(this.isHolo){const holoTilt=0.12*(this.side==='l'?1:-1)+0.03*Math.sin(this.idle*0.6);c.translate(cx,dy+this.h/2);c.rotate(holoTilt);c.translate(-cx,-(dy+this.h/2));}
     if(!this.alive&&this.deathAnim){c.globalAlpha=this.deathTimer/40;c.translate(cx,dy+this.h/2);c.rotate((1-this.deathTimer/40)*Math.PI*.5*(this.side==='l'?-1:1));c.translate(-cx,-(dy+this.h/2));}
     if(this.scaleX!==1||this.scaleY!==1){const pivX=cx,pivY=dy+this.h;c.translate(pivX,pivY);c.scale(this.scaleX,this.scaleY);c.translate(-pivX,-pivY);}
     // Shadow ellipse
@@ -4072,10 +4069,19 @@ function triggerHitFlash(col){hitFlash=8;hitFlashCol=col||'#ffffff';}
 
 let teamJ=[],teamE=[],ball={},turnJ=true,active=false,charging=false,chargeTimer=null,chargeLevel=0;
 const MAX_CHARGE=3;let rageJ=0,rageE=0,blockWin=false,blockTimer=null,blockTimeLeft=0,counterWin=false,counterTimer=null;
+// EVIL BALL: mientras más se carga, más se autodaña el portador (1/2/3 HP según nivel de carga).
+// Se compensa con x2 daño al rival al impactar (ver bloque de cálculo de daño en onImpact).
+function _evilBallSelfDamage(level,owner){
+  if(!owner||!owner.alive)return;
+  const activeSkin=BALL_SKINS.find(s=>s.id===selectedBallSkin);
+  if(!activeSkin||!activeSkin.isEvil||owner.side!=='l')return;
+  owner.takeDmg(1,true); // +1 HP de daño cada vez que sube un nivel de carga (1→1,2→2,3→3 acumulado)
+  spawnFloat('-1 EVIL!',owner.x+owner.w/2,owner.y-14,'#ff1133');
+}
 let blockSide=null; // PASO 2: 'l' o 'r' — qué equipo tiene la ventana de bloqueo activa (reemplaza la dependencia de turnJ)
 let counterSide=null; // PASO 2: 'l' o 'r' — qué equipo puede contraatacar
 const THROW_COOLDOWN_FRAMES=55; // PASO 2: ~0.9s a 60fps — tiempo de recarga tras lanzar, en vez de "esperar tu turno"
-let skipsShield=false,shakeF=0,shakeA=0,animId=null,leaderBuffActive={},turnCount=0,popsHealTimer=0;
+let skipsShield=false,shakeF=0,shakeA=0,animId=null,leaderBuffActive={},turnCount=0,popsHealTimer=0,_donFirstThrowUsed=false,_audreyFirstThrowUsed=false;
 let floorPowerups=[],activePowerup=null,armorShield=0,poisonTarget=null;
 let comboCount=0,comboTimer=0,comboMax=0;
 let parts=[],floats=[];
@@ -4138,6 +4144,9 @@ function startBattle(){
     setTurnSimultaneous();
   }else{setTurn(true);}
   if(leaderBuffActive.key==='cj'){teamE.filter(j=>j.alive).forEach(j=>j.frozen=1);spawnFloat('CONGELADOS!',W/2,60,'#aaddff');}
+  if(leaderBuffActive.key==='thomas'){const stolen=POWERUPS[Math.floor(Math.random()*POWERUPS.length)];applyPowerup(stolen);spawnFloat('¡ROBADO: '+stolen.name+'!',W/2,90,'#88aaff');}
+  if(leaderBuffActive.key==='techmo'){const ve=teamE.filter(j=>j.alive);if(ve.length){const t=ve[Math.floor(Math.random()*ve.length)];t._superDisabled=99;spawnFloat('SUPER HACKEADO!',t.x,t.y-20,'#00ffcc');}}
+  if(leaderBuffActive.key==='antipops'){teamJ.filter(j=>j.alive).forEach(j=>j.armor=1);spawnFloat('¡SINGULARIDAD PROTECTORA!',W/2,90,'#cc00ff');}
   setTimeout(spawnFloorPowerup,4000);
   if(animId)cancelAnimationFrame(animId);
   _applyArenaBg(currentBgIndex);
@@ -4187,6 +4196,8 @@ function updHUD(){
 function msg(t){$$('msgBar').textContent=t;}
 function setTurn(j){
   turnJ=j;const tb=$$('turnBadge');
+  if(j&&leaderBuffActive.key==='don')_donFirstThrowUsed=false; // BUFF: +2 daño al primer tiro de cada turno
+  if(j&&leaderBuffActive.key==='audrey')_audreyFirstThrowUsed=false; // BUFF: primer tiro de cada turno sin contra
   if(isVersus()&&versusSimultaneous){setTurnSimultaneous();return;}
   if(isVersus()){
     if(j){tb.textContent='J1 ATACA';tb.style.cssText='font-size:8px;padding:3px 8px;border:2px solid #00d4ff;color:#00d4ff;text-shadow:0 0 8px #00d4ff;animation:tbP 1.2s ease-in-out infinite;border-radius:4px;';}
@@ -4324,14 +4335,14 @@ function onPointerDown(e){
   }
   // ONLINE / NET-VERSUS: solo el portador de MI equipo puede iniciar tiro
   const _netRestricted=isOnline()||(sv._netVersus&&sv.gameMode==='versus');
-  const hitOpp=(!_netRestricted)&&hitFighter(oppTeam,x,y);if(hitOpp){touchStart.target=hitOpp;touchStart.targetType='enemy';ball.charge=0;charging=true;chargeLevel=0;clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;},360);swipeArrow={active:true,sx:x,sy:y,ex:x,ey:y};return;}
+  const hitOpp=(!_netRestricted)&&hitFighter(oppTeam,x,y);if(hitOpp){touchStart.target=hitOpp;touchStart.targetType='enemy';ball.charge=0;charging=true;chargeLevel=0;clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;_evilBallSelfDamage(chargeLevel,ball.owner);},360);swipeArrow={active:true,sx:x,sy:y,ex:x,ey:y};return;}
   // Portador de la pelota: solo si es de mi equipo y NO está en cooldown de lanzamiento
   const pos=ball.owner;
   const ballIsMine=pos&&pos.alive&&myTeam.includes(pos)&&(pos._throwCooldown||0)<=0;
-  if(ballIsMine){const hitO=hitFighter([pos],x,y);if(hitO){touchStart.target=pos;touchStart.targetType='allyBall';ball.charge=0;charging=true;chargeLevel=0;clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;},360);swipeArrow={active:true,sx:pos.x+pos.w/2,sy:pos.y+pos.h/2,ex:x,ey:y};return;}}
+  if(ballIsMine){const hitO=hitFighter([pos],x,y);if(hitO){touchStart.target=pos;touchStart.targetType='allyBall';ball.charge=0;charging=true;chargeLevel=0;clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;_evilBallSelfDamage(chargeLevel,ball.owner);},360);swipeArrow={active:true,sx:pos.x+pos.w/2,sy:pos.y+pos.h/2,ex:x,ey:y};return;}}
   const hitAlly=hitFighter(myTeam.filter(j=>j!==ball.owner),x,y);if(hitAlly){dragFighter=hitAlly;isDragging=true;hitAlly.isDragged=true;touchStart.target=hitAlly;touchStart.targetType='ally';return;}
-  if(wallSide&&ballIsMine){touchStart.targetType='wall';ball.charge=0;charging=true;chargeLevel=0;swipeArrow={active:true,sx:x,sy:y,ex:x,ey:y};clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;},360);return;}
-  if(inOppHalf&&ballIsMine){const vivos=oppTeam.filter(j=>j.alive);if(vivos.length){touchStart.targetType='enemy';ball.charge=0;charging=true;chargeLevel=0;swipeArrow={active:true,sx:pos.x+pos.w/2,sy:pos.y+pos.h/2,ex:x,ey:y};clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;},360);return;}}
+  if(wallSide&&ballIsMine){touchStart.targetType='wall';ball.charge=0;charging=true;chargeLevel=0;swipeArrow={active:true,sx:x,sy:y,ex:x,ey:y};clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;_evilBallSelfDamage(chargeLevel,ball.owner);},360);return;}
+  if(inOppHalf&&ballIsMine){const vivos=oppTeam.filter(j=>j.alive);if(vivos.length){touchStart.targetType='enemy';ball.charge=0;charging=true;chargeLevel=0;swipeArrow={active:true,sx:pos.x+pos.w/2,sy:pos.y+pos.h/2,ex:x,ey:y};clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;_evilBallSelfDamage(chargeLevel,ball.owner);},360);return;}}
   const rage=myTeam===teamJ?rageJ:rageE;
   if(rage>=100){superHoldProgress=0;clearInterval(superHoldTimer);superHoldTimer=setInterval(()=>{superHoldProgress=Math.min(1,superHoldProgress+.05);if(superHoldProgress>=1){clearInterval(superHoldTimer);myTeam===teamJ?doSuper():doSuperJ2();}},40);}
 }
@@ -4476,11 +4487,11 @@ function onPointerUp(e){
   const wallHit2=myTeam2===teamJ?(x>W*.7):(x<W*.3);
   const wallX2=myTeam2===teamJ?W-20:20;
   const type=touchStart.targetType;
-  if((type==='allyBall'||type==='enemy')&&charging){charging=false;if(leaderBuffActive.key==='muscle'&&ball.charge===MAX_CHARGE)ball.charge+=2;
+  if((type==='allyBall'||type==='enemy')&&charging){charging=false;if(leaderBuffActive.key==='muscleman'&&ball.charge===MAX_CHARGE)ball.charge+=2;
     if(pos&&pos.alive){
       // Pase a aliado: solo si el dedo cae ENCIMA del aliado (radio pequeño 28px)
       const aimAlly=hitFighter(myTeam2.filter(j=>j.alive&&j!==pos),x,y,28);
-      if(aimAlly){let spd=14;if(leaderBuffActive.key==='rigby')spd=9;throwBall(pos,aimAlly,true,false,spd);spawnFloat('PASE!',pos.x+pos.w/2,pos.y-10,'#00d4ff');return;}
+      if(aimAlly){let spd=14;if(leaderBuffActive.key==='rigby')spd=9;else if(leaderBuffActive.key==='hifive')spd=9;throwBall(pos,aimAlly,true,false,spd);spawnFloat('PASE!',pos.x+pos.w/2,pos.y-10,'#00d4ff');return;}
       // Tiro libre: siempre hacia donde apunta el jugador (desde el lanzador hasta el punto de release)
       const ox=pos.x+pos.w/2, oy=pos.y+pos.h/2-(pos.jumpH||0);
       throwBallFree(pos, x-ox, y-oy, ball.charge);
@@ -4553,9 +4564,9 @@ function onPointerDownJ1(x,y){
   const hitAllyAny=hitFighter(teamJ,x,y,44);if(hitAllyAny){dragFighter=hitAllyAny;isDragging=true;hitAllyAny.isDragged=true;touchStart.target=hitAllyAny;touchStart.targetType='ally';return;}
   // J1: puede APUNTAR/DISPARAR al rival (solo toque, no arrastre)
   const hitOpp=hitFighter(teamE,x,y,44);
-  if(hitOpp){touchStart.target=hitOpp;touchStart.targetType='enemy';ball.charge=0;charging=true;chargeLevel=0;clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;},360);swipeArrow={active:true,sx:x,sy:y,ex:x,ey:y};return;}
-  const pos=ball.owner;if(pos&&pos.alive&&pos.side==='l'){const hitO=hitFighter([pos],x,y,44);if(hitO){touchStart.target=pos;touchStart.targetType='allyBall';ball.charge=0;charging=true;chargeLevel=0;clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;},360);swipeArrow={active:true,sx:pos.x+pos.w/2,sy:pos.y+pos.h/2,ex:x,ey:y};return;}}
-  if(x>W*.55&&pos&&pos.alive&&pos.side==='l'){touchStart.targetType='enemy';ball.charge=0;charging=true;chargeLevel=0;swipeArrow={active:true,sx:pos.x+pos.w/2,sy:pos.y+pos.h/2,ex:x,ey:y};clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;},360);}
+  if(hitOpp){touchStart.target=hitOpp;touchStart.targetType='enemy';ball.charge=0;charging=true;chargeLevel=0;clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;_evilBallSelfDamage(chargeLevel,ball.owner);},360);swipeArrow={active:true,sx:x,sy:y,ex:x,ey:y};return;}
+  const pos=ball.owner;if(pos&&pos.alive&&pos.side==='l'){const hitO=hitFighter([pos],x,y,44);if(hitO){touchStart.target=pos;touchStart.targetType='allyBall';ball.charge=0;charging=true;chargeLevel=0;clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;_evilBallSelfDamage(chargeLevel,ball.owner);},360);swipeArrow={active:true,sx:pos.x+pos.w/2,sy:pos.y+pos.h/2,ex:x,ey:y};return;}}
+  if(x>W*.55&&pos&&pos.alive&&pos.side==='l'){touchStart.targetType='enemy';ball.charge=0;charging=true;chargeLevel=0;swipeArrow={active:true,sx:pos.x+pos.w/2,sy:pos.y+pos.h/2,ex:x,ey:y};clearInterval(holdChargeTimer);holdChargeTimer=setInterval(()=>{if(!charging||chargeLevel>=MAX_CHARGE)return;chargeLevel++;ball.charge=chargeLevel;_evilBallSelfDamage(chargeLevel,ball.owner);},360);}
   if(rageJ>=100){superHoldProgress=0;clearInterval(superHoldTimer);superHoldTimer=setInterval(()=>{superHoldProgress=Math.min(1,superHoldProgress+.05);if(superHoldProgress>=1){clearInterval(superHoldTimer);doSuperJ1Sim();}},40);}
 }
 
@@ -4581,7 +4592,7 @@ function onPointerUpJ1(x,y){
   if(isDragging&&dragFighter){isDragging=false;dragFighter.manualMove=true;dragFighter.isDragged=false;dragFighter=null;charging=false;return;}
   const pos=ball.owner;const type=touchStart.targetType;
   if((type==='allyBall'||type==='enemy')&&charging&&pos&&pos.alive&&pos.side==='l'){
-    charging=false;if(leaderBuffActive.key==='muscle'&&ball.charge===MAX_CHARGE)ball.charge+=2;
+    charging=false;if(leaderBuffActive.key==='muscleman'&&ball.charge===MAX_CHARGE)ball.charge+=2;
     // Pase a aliado solo si cae encima (radio pequeño)
     const aimAlly=hitFighter(teamJ.filter(j=>j.alive&&j!==pos),x,y,28);
     if(aimAlly){throwBall(pos,aimAlly,true,false,14);spawnFloat('PASE!',pos.x+pos.w/2,pos.y-10,'#00d4ff');return;}
@@ -4647,7 +4658,7 @@ function releaseJ1KeyThrow(){
   let tgt=vivos.reduce((a,b)=>Math.abs(b.y-pos.y)<Math.abs(a.y-pos.y)?b:a);
   if(keysJ1.up)tgt=vivos.reduce((a,b)=>a.y<b.y?a:b);
   if(keysJ1.down)tgt=vivos.reduce((a,b)=>a.y>b.y?a:b);
-  if(leaderBuffActive.key==='muscle'&&ball.charge===MAX_CHARGE)ball.charge+=2;
+  if(leaderBuffActive.key==='muscleman'&&ball.charge===MAX_CHARGE)ball.charge+=2;
   throwBallFree(pos,tgt.x+tgt.w/2-(pos.x+pos.w/2),tgt.y+tgt.h/2-(pos.y+pos.h/2),ball.charge);
 }
 
@@ -4780,14 +4791,15 @@ function _openCloneCopyModal(h){
 window.superSkips=function(h){skipsShield=true;teamJ.filter(j=>j.alive).forEach(j=>j.armor=2);spawnFloat('BARRERA BIÓNICA!',h.x+h.w/2,h.y-20,'#bb88ff');spawnFloat('EQUIPO PROTEGIDO',W/2,100,'#aaaaaa');};
 window.superBenson=function(h){rageJ=100;updRageBtn();const ve=teamE.filter(j=>j.alive);if(ve.length){const t=ve[Math.floor(Math.random()*ve.length)];t.takeDmg(2);}spawnFloat('RAGE BURST!',W/2,H/2,'#ff6644');};
 function _healAmount(caster){
-  if(!caster||!caster.key||!CHARS[caster.key])return 1;
+  if(!caster||!caster.key||!CHARS[caster.key])return leaderBuffActive.key==='eileen'?2:1;
   const healBonus=roleBonusParts(caster.key).heal;
-  return healBonus>0?Math.ceil(1*(1+healBonus)):1;
+  const base=healBonus>0?Math.ceil(1*(1+healBonus)):1;
+  return leaderBuffActive.key==='eileen'?base+1:base;
 }
-window.superPops=function(h){const amt=_healAmount(h);teamJ.filter(j=>j.alive).forEach(j=>j.heal(amt));spawnFloat('JOLLY GOOD!',W/2,H/2,'#ffcc00');};
+window.superPops=function(h){const amt=_healAmount(h);teamJ.filter(j=>j.alive).forEach(j=>j.heal(amt));rageJ=Math.min(100,rageJ+15);updRageBtn();spawnFloat('JOLLY GOOD!',W/2,H/2,'#ffcc00');spawnFloat('+15 RABIA!',W/2,140,'#ffcc00');};
 window.superMuscle=function(h){const ve=teamE.filter(j=>j.alive);if(!ve.length)return;const tgt=ve.reduce((a,b)=>a.hp>b.hp?a:b);tgt.takeDmg(3);spawnFloat('MY MOM!!',h.x+h.w/2,h.y-25,'#44bb44');spark(W/2,H/2,'#44bb44',20);};
 window.superHifive=function(h){const ve=teamE.filter(j=>j.alive);if(ve.length){const t=ve[Math.floor(Math.random()*ve.length)];t.frozen=2;spawnFloat('GHOST PASS!',t.x,t.y-20,'#aabbdd');}};
-window.superEileen=function(h){const amt=_healAmount(h);teamJ.filter(j=>j.alive).forEach(j=>j.heal(amt));spawnFloat('CRUSH STUDY!',W/2,H/2,'#ff8899');};
+window.superEileen=function(h){const amt=_healAmount(h);teamJ.filter(j=>j.alive).forEach(j=>{j.heal(amt);if(j._throwCooldown>0)j._throwCooldown=Math.floor(j._throwCooldown*0.4);});spawnFloat('CRUSH STUDY!',W/2,H/2,'#ff8899');spawnFloat('¡RECARGA RÁPIDA!',W/2,140,'#ff8899');};
 window.superMargaret=function(h){const ve=teamE.filter(j=>j.alive);if(ve.length){throwBall(h,ve[0],false,true,4);}spawnFloat('WING STRIKE!',h.x,h.y-20,'#ff5566');};
 window.superCJ=function(h){teamE.filter(j=>j.alive).forEach(j=>j.frozen=2);spawnFloat('CLOUD STORM!',W/2,H/2,'#aaddff');explosion(W/2,H/2);};
 window.superThomas=function(h){if(floorPowerups.length){const p=floorPowerups.pop();applyPowerup(p.def);spawnFloat('SPY MOVE!',h.x,h.y-20,'#88aaff');}else{addRage('j',40);spawnFloat('SPY BOOST!',h.x,h.y-20,'#88aaff');}};
@@ -4796,7 +4808,7 @@ window.superGC=function(h){const amt=_healAmount(h);teamJ.filter(j=>j.alive).for
 window.superLow5=function(h){const amt=_healAmount(h);const ve=teamE.filter(j=>j.alive);if(ve.length){ve.forEach(j=>{j.frozen=1;});spawnFloat('LOW FIVE BLAST!',W/2,H/2,'#88bbdd');teamJ.filter(j=>j.alive).forEach(j=>j.heal(amt));}};
 window.superDon=function(h){const ve=teamE.filter(j=>j.alive);spawnFloat('SUGAR RUSH!',W/2,H/2,'#dd8844');ve.forEach(e=>{e.takeDmg(2);});teamJ.filter(j=>j.alive).forEach(j=>{j._donBoost=2;});};
 window.superTechmo=function(h){teamE.filter(j=>j.alive).forEach(e=>{e._superDisabled=3;e.frozen=1;});spawnFloat('TECH HACK!',W/2,H/2,'#00ffcc');};
-window.superAudrey=function(h){const ve=teamE.filter(j=>j.alive);explosion(W/2,H/2);spawnFloat('EAGLE DIVE!',W/2,80,'#ff88bb');if(ve.length){const t=ve.reduce((a,b)=>b.hp>a.hp?b:a);t.takeDmg(4,true);spawnFloat('-4!',t.x,t.y-20,'#ff88bb');}};
+window.superAudrey=function(h){const amt=_healAmount(h);teamJ.filter(j=>j.alive).forEach(j=>j.heal(amt));rageE=Math.max(0,rageE-25);updHUD();spawnFloat('CALMING PRESENCE!',W/2,H/2,'#ff88bb');spawnFloat('-25 RABIA RIVAL',W-150,80,'#ff88bb');};
 
 function eSuperDoom(e){const vj=teamJ.filter(j=>j.alive);if(!vj.length)return;const tgt=vj[Math.floor(Math.random()*vj.length)];tgt.takeDmg(3,true);spawnFloat('TIRO MALDITO!',tgt.x,tgt.y-20,'#ff2277');}
 function eSuperBane(e){const vj=teamJ.filter(j=>j.alive);if(!vj.length)return;const tgt=vj.reduce((a,b)=>a.hp<b.hp?a:b);tgt.takeDmg(tgt.hp,true);spawnFloat('¡APLASTADO!',tgt.x,tgt.y-20,'#ff6600');}
@@ -4814,7 +4826,8 @@ function throwBallFree(src, dx, dy, charge){
   // La distancia del swipe no cambia la dirección, solo la usamos para velocidad mínima
   const baseSpd = Math.max(7, 20 - (charge||0)*3.5);
   // Píxeles por frame — escala con el tamaño del canvas
-  const pxPerFrame = (W * 0.055) * (1 + (charge||0) * 0.18);
+  let pxPerFrame = (W * 0.055) * (1 + (charge||0) * 0.18);
+  if(leaderBuffActive.key==='margaret'&&src&&src.side==='l')pxPerFrame*=1.18; // BUFF: Tiros +1 velocidad
   ball.inFlight = true; ball._free = true; ball._bounces = 0;
   ball.src = src; ball.isPase = false; ball._angle = 0;
   ball.x = src.x+(src.w||0)/2;
@@ -4949,7 +4962,9 @@ function throwBall(src,dest,isPase,isCounter=false,spd=14){
   // bloqueo, identificado por el SIDE de "dest", no por un turno global.
   if(!isPase&&!isCounter){
     if(src)src._throwCooldown=THROW_COOLDOWN_FRAMES;
-    if(ball.type!=='speedball'){const delay=Math.max(80,spd*16.67*.35);
+    const audreyNoBlock=src&&src.side==='l'&&leaderBuffActive.key==='audrey'&&!_audreyFirstThrowUsed;
+    if(audreyNoBlock){_audreyFirstThrowUsed=true;spawnFloat('¡SIN CONTRA!',src.x+src.w/2,src.y-30,'#ff88bb');}
+    if(ball.type!=='speedball'&&!audreyNoBlock){const delay=Math.max(80,spd*16.67*.35);
       setTimeout(()=>{if(!ball.inFlight||ball.isPase)return;if(skipsShield){setTimeout(()=>doBlock(),200);return;}
         blockWin=true;blockSide=(dest&&dest.side)||(src&&src.side==='l'?'r':'l');$$('blockBig').style.display='block';const blockDur=(1.0+sv.lB*.4)*1000*(leaderBuffActive.key==='skips'?2:1);$$('blockFill').style.width='100%';$$('blockFill').style.transition=`width ${blockDur}ms linear`;setTimeout(()=>{$$('blockFill').style.width='0%';},10);
         clearTimeout(blockTimer);clearInterval(blockFillTimer);blockTimer=setTimeout(()=>{blockWin=false;$$('blockBig').style.display='none';},blockDur);},delay);}}
@@ -4984,6 +4999,8 @@ function onImpact(){
     if(ball.type==='blastball'){const ot=dest.side==='l'?teamE:teamJ;ot.filter(j=>j.alive&&j!==dest).forEach(j=>{if(Math.sqrt((j.x-dest.x)**2+(j.y-dest.y)**2)<120)j.takeDmg(1);});spawnFloat('BLAST AOE!',dest.x,dest.y-20,'#ff8800');explosion(dest.x+dest.w/2,dest.y);}
     // Bonus de RANGO+NIVEL: el personaje que lanza aplica su % de daño (según su rol) como multiplicador
     if(src&&src.key&&CHARS[src.key]){const bonusKey=src._copiedKey||src.key;const dmgBonus=roleBonusParts(bonusKey).dmg;if(dmgBonus>0)dmg=Math.round(dmg*(1+dmgBonus));}
+    if(src&&src.side==='l'&&leaderBuffActive.key==='don'&&!_donFirstThrowUsed&&!ball.isPase){_donFirstThrowUsed=true;dmg+=2;spawnFloat('+2 SUGAR RUSH!',src.x+src.w/2,src.y-30,'#dd8844');}
+    if(src&&src.side==='l'){const activeSkin=BALL_SKINS.find(s=>s.id===selectedBallSkin);if(activeSkin&&activeSkin.isEvil){dmg*=2;spawnFloat('EVIL x2!',dest.x,dest.y-35,'#ff1133');}}
     dest.takeDmg(dmg);msg('¡IMPACTO en '+(dest.nameEs&&_lang==='es'?dest.nameEs:dest.name)+'! -'+dmg+' HP'+(ball.type!=='normal'?' ['+ball.type.toUpperCase()+']':''));
     shakeF=10;shakeA=6;triggerHitFlash(ball.type==='fireball'?'#ff4400':ball.type==='poisonball'?'#00cc44':'#ffffff');if(dest.alive){ball.owner=dest;}ball.charge=0;
     if(src&&src.side==='l'){addRage('j',15+(ball.type!=='normal'?10:0));addCombo();}else{addRage('e',15);if(src&&src.side==='r')resetCombo();}
@@ -5023,6 +5040,7 @@ function onImpact(){
   if(!ball.owner||!ball.owner.alive){const eq=ball.owner?ball.owner.side==='l'?teamJ:teamE:teamE;ball.owner=eq.find(j=>j.alive)||([...teamJ,...teamE].find(j=>j.alive));}
   checkWin();
   if(ball.owner&&ball.owner.side==='l'&&leaderBuffActive.key==='pops'){popsHealTimer++;if(popsHealTimer>=2){popsHealTimer=0;teamJ.filter(j=>j.alive).forEach(j=>j.heal(1));}}
+  if(ball.owner&&ball.owner.side==='l'&&leaderBuffActive.key==='low5'){popsHealTimer++;if(popsHealTimer>=2){popsHealTimer=0;teamJ.filter(j=>j.alive).forEach(j=>j.heal(1));}}
   // turnJ ya no controla quién puede actuar — se mantiene solo para HUD/compatibilidad visual
   if(ball.owner)turnJ=(ball.owner.side==='l');
 }
@@ -5043,11 +5061,14 @@ function aiTurn(){
   if(ball.inFlight)return;
   _aiThinkCooldown=20; // ~0.33s entre decisiones, para que no sea instantáneo
   if(rageE>=100){
-    rageE=0;updHUD();const superFn=pos.superFn;
-    if(superFn&&window[superFn]){
-      msg(pos.name+' usa '+pos.superName+'!');shakeF=12;shakeA=6;sfxSuper();
-      window[superFn](pos);updHUD();checkWin();
-      return;
+    if((pos._superDisabled||0)>0){pos._superDisabled--;}
+    else{
+      rageE=0;updHUD();const superFn=pos.superFn;
+      if(superFn&&window[superFn]){
+        msg(pos.name+' usa '+pos.superName+'!');shakeF=12;shakeA=6;sfxSuper();
+        window[superFn](pos);updHUD();checkWin();
+        return;
+      }
     }
   }
   const vj=teamJ.filter(j=>j.alive);const ve=teamE.filter(j=>j.alive);if(!vj.length){checkWin();return;}
