@@ -5151,7 +5151,18 @@ function aiTurn(){
   if(Math.random()<0.15+diff*0.12){ball.isWall=true;const wallX=20,wallY=80+Math.random()*(H-160);throwBall(pos,{x:wallX,y:wallY,w:0,h:0,alive:true,side:'wall',jumping:false,_isWall:true,_realTarget:tgt},false,false,16);}
   else{throwBall(pos,tgt,false,false,Math.max(8,24-ball.charge*5));}
 }
-function checkWin(){if(teamJ.filter(j=>j.alive).length===0){setTimeout(()=>endGame(false),600);return true;}if(teamE.filter(j=>j.alive).length===0){setTimeout(()=>endGame(true),600);return true;}return false;}
+function checkWin(){
+  if(teamJ.filter(j=>j.alive).length===0){_notifyNetEndGame(false);setTimeout(()=>endGame(false),600);return true;}
+  if(teamE.filter(j=>j.alive).length===0){_notifyNetEndGame(true);setTimeout(()=>endGame(true),600);return true;}
+  return false;
+}
+// Avisa al guest el resultado REAL (visto desde el host) antes de cerrar la partida.
+// hostWon = true si gana el HOST (teamJ). El guest lo traduce a su propia perspectiva.
+function _notifyNetEndGame(hostWon){
+  if(myNetRole()!=='host')return;
+  const ch=_netChannel||_onlineChannel;
+  if(ch&&ch.open){try{ch.send({type:'endGame',hostWon});}catch(e){}}
+}
 function endGame(win){
   active=false;if(animId)cancelAnimationFrame(animId);clearInterval(chargeTimer);clearTimeout(blockTimer);clearTimeout(counterTimer);
   // Limpiar mapa de touch-owners del modo simultáneo (evita fugas entre partidas)
@@ -5207,14 +5218,10 @@ function endGame(win){
   }
   if(win===true){
     // Online: determine if local player won based on role
-    const localWin=isOnlineReal()?(
-      sv._onlineVersusRole==='host'?(win===true):( win===false)
-    ):true;
-    // For online/online_bot, compute LP
+    const localWin=(win===true);
     let onlineResult=null;
     if(isOnline()){
-      const actualWin=isOnlineReal()?( sv._onlineVersusRole==='host'?true:false ):true;
-      onlineResult=_applyOnlineResult(actualWin);
+      onlineResult=_applyOnlineResult(localWin);
     }
     const coinReward=mode==='online'||mode==='online_bot'?80:mode==='tournament'?200:mode==='story'?160:mode==='challenge'?100:120;
     sv.coins+=coinReward;sv._lastWinCoins=coinReward;sv.wins=(sv.wins||0)+1;sv.gamesPlayed=(sv.gamesPlayed||0)+1;
@@ -6139,16 +6146,10 @@ function _sendOnlineAction(type,data){_sendNetAction(type,data);}
 function _handleOnlineSync(msg){
   if(!msg||!msg.type)return;
   if(msg.type==='selection_ready'){_onlineRivalSelection=msg.data;return;}
-  if(msg.type!=='game_sync')return;
-  const a=msg.action,d=msg.data||{};
-  if(a==='throw_ball'&&d.destKey){
-    const dest=(turnJ?teamE:teamJ).find(f=>f.key===d.destKey||f.name===d.destKey);
-    const src=(turnJ?teamJ:teamE).find(f=>f.alive);
-    if(dest&&src)throwBall(src,dest,false,false,d.spd||14);
-  }
-  if(a==='block'&&blockWin)doBlock();
-  if(a==='counter'&&counterWin)doCounter();
-  if(a==='super'){if(_onlineRole==='host')doSuperJ2();else doSuper();}
+  // Resto de tipos (input/state/toast/float/endGame) comparten exactamente
+  // la misma lógica que el modo Versus P2P por sala — un solo handler genérico
+  // evita que ambos sistemas se desincronicen entre sí (causa del bug original).
+  _handleNetVsMsg(msg);
 }
 // ═══════════════════════════════════════════════════════════
 // MODO INFINITO
@@ -6507,7 +6508,7 @@ function _handleNetVsMsg(data){
     return;
   }
   if(data.type==='endGame'){
-    endGame(data.guestWon);
+    endGame(myNetRole()==='host'?data.hostWon:!data.hostWon);
     return;
   }
 }
