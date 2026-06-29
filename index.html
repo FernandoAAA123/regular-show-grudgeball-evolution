@@ -4156,6 +4156,7 @@ function startBattle(){
   $$('blockBig').style.display='none';$$('counterBig').style.display='none';$$('comboDisplay').textContent='';
   if($$('rageBig'))$$('rageBig').style.display='none';clearTimeout(blockTimer);clearTimeout(counterTimer);
   armorShield=0;poisonTarget=null;activePowerup=null;floorPowerups=[];parts=[];floats=[];shakeF=0;
+  window._mirrorLogged=false;
   // ── Limpiar estado de red si no es una partida de sala/online ──
   const isNetMode=(sv.gameMode==='online')||(sv.gameMode==='versus'&&sv._netVersus);
   if(!isNetMode){
@@ -7022,6 +7023,7 @@ function drawScene(){
   // volteamos el LIENZO al dibujar, para que el guest vea su propio
   // equipo (teamE) a la izquierda, igual que J1 lo ve siempre.
   const _mirrorView=(myNetRole()==='guest');
+  if(!window._mirrorLogged){window._mirrorLogged=true;console.log('[MIRROR] myNetRole()=',myNetRole(),'isVersus=',isVersus(),'sv._netVersus=',sv._netVersus,'sv._netRole=',sv._netRole,'isOnlineReal=',isOnlineReal());}
   if(_mirrorView){
     ctx.translate(W,0);ctx.scale(-1,1);
     // Contrarrestar el espejo SOLO para texto, para que no salga al revés.
