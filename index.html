@@ -2166,9 +2166,9 @@ function dailyShardOffers(){
 // animación) ya lo soporta automáticamente.
 const CHEST_TYPES={
   basic:  {id:'basic',  name:'COFRE BÁSICO',  icon:'📦', col:'#aa44dd', desc:'2 recompensas · fichas comunes a raras con más frecuencia',
-           weightBoost:0},
-  premium:{id:'premium',name:'COFRE PREMIUM', icon:'🎁', col:'#ffaa00', desc:'2 recompensas · mejor probabilidad de épico y legendario',
-           weightBoost:1},
+           weightBoost:0,rolls:2},
+  premium:{id:'premium',name:'COFRE PREMIUM', icon:'🎁', col:'#ffaa00', desc:'5 recompensas · mejor probabilidad de épico y legendario',
+           weightBoost:1,rolls:5},
 };
 // ── TIENDA: precio en monedas/tickets para comprar cofres directamente ──
 const CHEST_SHOP_PRICE={basic:{coins:300},premium:{tickets:15}};
@@ -2250,7 +2250,10 @@ function _rollChestReward(boost){
     if(!candidates.length)candidates=pool;
     const char=candidates[Math.floor(Math.random()*candidates.length)];
     // Comunes y raras dan más cantidad ahora que cuestan más desbloquear
-    const amt=char.rarity==='common'?6:char.rarity==='rare'?4:char.rarity==='epic'?2:1;
+    const amt=char.rarity==='common'?(8+Math.floor(Math.random()*8)) // 8–15
+      :char.rarity==='rare'?(5+Math.floor(Math.random()*4)) // 5–8
+      :char.rarity==='epic'?(3+Math.floor(Math.random()*3)) // 3–5
+      :(2+Math.floor(Math.random()*2)); // legendary: 2–3
     return {kind:'char',charKey:char.key,amt};
   }
   return _rollBallReward(boost);
@@ -2263,7 +2266,10 @@ function _rollBallReward(boost){
   let candidates=pool.filter(b=>b.rarity===rarity);
   if(!candidates.length)candidates=pool;
   const ball=candidates[Math.floor(Math.random()*candidates.length)];
-  const amt=ball.rarity==='common'?3:ball.rarity==='rare'?2:1;
+  const amt=ball.rarity==='common'?(8+Math.floor(Math.random()*8)) // 8–15
+    :ball.rarity==='rare'?(5+Math.floor(Math.random()*4)) // 5–8
+    :ball.rarity==='epic'?(2+Math.floor(Math.random()*3)) // 2–4
+    :(1+Math.floor(Math.random()*2)); // legendary: 1–2
   return {kind:'ball',ballId:ball.id,amt};
 }
 function _rollCharFallback(){
@@ -2277,9 +2283,11 @@ function _rollCharFallback(){
 // Devuelve resultItems para que la animación los revele paso a paso.
 function _resolveChestOpen(chestType){
   chestType=chestType||'basic';
-  const boost=(CHEST_TYPES[chestType]&&CHEST_TYPES[chestType].weightBoost)||0;
+  const chestDef=CHEST_TYPES[chestType]||{};
+  const boost=chestDef.weightBoost||0;
+  const numRolls=chestDef.rolls||2;
   sv.charShards=sv.charShards||{};sv.ballShards=sv.ballShards||{};
-  const rewards=[_rollChestReward(boost),_rollChestReward(boost)];
+  const rewards=[];for(let i=0;i<numRolls;i++)rewards.push(_rollChestReward(boost));
   const resultItems=[];
   rewards.forEach(r=>{
     if(r.kind==='ball'){
@@ -2388,6 +2396,16 @@ function claimDailyChest(){
   toast('📦 ¡Cofre diario reclamado!','#00ff88');buildCollectionChests();
 }
 // Chance de obtener un cofre extra al ganar una partida (se llama desde el flujo de victoria)
+function applyBallWinBonus(){
+  const b=BALL_SKINS.find(s=>s.id===selectedBallSkin);if(!b)return;
+  if(b.id==='gold_ball'){const bonus=Math.round((sv._lastWinCoins||0)*0.5);if(bonus>0){sv.coins+=bonus;toast('🟡 +'+bonus+' monedas (Balón Oro)','#ffd700');}}
+  if(b.id==='diamond_ball'){addChest('basic',1);toast('💎 ¡Cofre extra garantizado! (Balón Diamante)','#a8e4ff');}
+  if((b.id==='future_ball'||b.id==='luxury_ball')&&[...selectedChars].length){
+    const k=[...selectedChars][Math.floor(Math.random()*selectedChars.size)];
+    sv.charShards=sv.charShards||{};sv.charShards[k]=(sv.charShards[k]||0)+1;
+    toast('🔮 +1 ficha extra de '+charName(CHARS[k]),'#00e0ff');
+  }
+}
 function maybeDropWinChest(){
   if(Math.random()<0.20){addChest('basic',1);toast('📦 ¡Cofre obtenido por la victoria!','#00d4ff');}
 }
@@ -3185,7 +3203,7 @@ const BALL_SKINS=[
   {id:'spike_ball',name:'BALÓN PÚAS',col:'#444444',glowCol:'#cccccc',rarity:'epic',unlocked:false,emoji:'🔘',imgUrl:'https://chibi.iitranq.co.uk/XTmsnPNQmP0T.png'},
   {id:'saturn_ball',name:'BALÓN SATURNO',col:'#cc9955',glowCol:'#66eecc',rarity:'epic',unlocked:false,emoji:'🪐',imgUrl:'https://chibi.iitranq.co.uk/3KGaOJOaGhZ2.png'},
   {id:'eight_ball',name:'BOLA 8',col:'#1a1a1a',glowCol:'#ffffff',rarity:'epic',unlocked:false,emoji:'🎱',imgUrl:'https://chibi.iitranq.co.uk/J8mgbl99my0M.png'},
-  {id:'clay_ball',name:'BALÓN PLASTILINA',col:'#ff1133',glowCol:'#ff3355',rarity:'epic',unlocked:false,emoji:'-',imgUrl:'https://chibi.iitranq.co.uk/ZNk2RFiFb8gF.png',
+  {id:'clay_ball',name:'BALÓN PLASTILINA',col:'#ff1133',glowCol:'#ff3355',rarity:'epic',unlocked:false,emoji:'-',imgUrl:'https://chibi.iitranq.co.uk/ZNk2RFiFb8gF.png'},
   {id:'gold_ball',name:'BALÓN ORO',col:'#ffd700',glowCol:'#ffaa00',rarity:'epic',unlocked:false,emoji:'🟡',imgUrl:'https://chibi.iitranq.co.uk/oItH0GUhIOH8.png'},
   {id:'diamond_ball',name:'BALÓN DIAMANTE',col:'#a8e4ff',glowCol:'#ffffff',rarity:'epic',unlocked:false,emoji:'💎',imgUrl:'https://chibi.iitranq.co.uk/eRLGgfyMgTbc.png'},
   {id:'evil_ball',name:'EVIL BALL',col:'#ff1133',glowCol:'#ff3355',rarity:'epic',unlocked:false,emoji:'😈',imgUrl:'https://chibi.iitranq.co.uk/5i3pqMEY0YPd.png',isEvil:true},
@@ -3199,6 +3217,44 @@ const BALL_SKINS=[
 // Captura el estado "unlocked" por defecto de cada balón (usado por resetProgress)
 BALL_SKINS.forEach(b=>{b._defaultUnlocked=!!b.unlocked;});
 let selectedBallSkin='default';
+// ── BUFFS ÚNICOS POR BALÓN ──
+// Aplica el efecto del balón equipado por el lanzador (src) al impactar. Devuelve el daño
+// final (puede modificarlo) y aplica efectos secundarios (congelar, robar, curar, etc.)
+// directamente sobre dest/src. Los balones simples (default/red/green/pinky) no tienen efecto.
+function applyBallSkinEffect(dmg,src,dest){
+  if(!src||src.side!=='l')return dmg; // solo el jugador, igual que Evil Ball
+  const b=BALL_SKINS.find(s=>s.id===selectedBallSkin);
+  if(!b)return dmg;
+  const id=b.isEvil?'evil_ball':b.id;
+  switch(id){
+    case 'evil_ball': dmg*=2; spawnFloat('EVIL x2!',dest.x,dest.y-35,'#ff1133'); break;
+    case 'mint_ball': src.heal(1); spawnFloat('+1 HP MENTA',src.x,src.y-20,'#88ffcc'); break;
+    case 'volcano_ball': dmg+=1; spawnFloat('+1 VOLCANO',dest.x,dest.y-35,'#ff4422'); break;
+    case 'electroshock_ball': if(Math.random()<0.20){dest.frozen=1;spawnFloat('¡PARALIZADO!',dest.x,dest.y-20,'#ffff00');} break;
+    case 'glass_ball': if(dest.armor>0){dest.armor=0;spawnFloat('ARMOR ROTO!',dest.x,dest.y-20,'#bbe8ff');} break;
+    case 'draw_ball': /* el +1 carga inicial gratis se aplica en startBattle, ver _ballSkinChargeBonus */ break;
+    case 'tech_ball': if(src._throwCooldown>0)src._throwCooldown=Math.floor(src._throwCooldown*0.8); break;
+    case 'clone_ball': if(activePowerup){applyPowerup(activePowerup);spawnFloat('¡DUPLICADO!',dest.x,dest.y-35,'#33cc66');} break;
+    case 'fire_ball': dmg=Math.round(dmg*1.5); if(ball.type==='fireball')dmg*=2; spawnFloat('+50% FUEGO!',dest.x,dest.y-35,'#ff2200'); break;
+    case 'ice_ball': if(Math.random()<0.35){dest.frozen=1;spawnFloat('¡CONGELADO!',dest.x,dest.y-20,'#66ddff');} break;
+    case 'cloud_ball': case 'ghost_ball': case 'lowpoly_ball': /* esquiva de bloqueo: implementado en el chequeo de blockWin */ break;
+    case 'vintage_ball': src.heal(2); spawnFloat('+2 HP VINTAGE',src.x,src.y-20,'#cc9966'); break;
+    case 'cyber_ball': addRage('j',10); spawnFloat('+10 RABIA',src.x,src.y-20,'#00ffff'); break;
+    case 'galaxy_ball': { const r=1+Math.floor(Math.random()*6); dmg=r; spawnFloat('GALAXIA: '+r+'!',dest.x,dest.y-35,'#cc44ff'); } break;
+    case 'future_ball': case 'luxury_ball': /* +1 ficha al ganar con él puesto, ver endGame */ break;
+    case 'pixel_ball': if(Math.random()<0.15){dmg*=2;spawnFloat('¡CRÍTICO 8-BIT!',dest.x,dest.y-35,'#ffaa00');} break;
+    case 'spike_ball': { const chargeBonus=Math.min(ball.charge,MAX_CHARGE)*2; dmg+=chargeBonus; if(chargeBonus>0)spawnFloat('+'+chargeBonus+' PÚAS!',dest.x,dest.y-35,'#444444'); } break;
+    case 'saturn_ball': { const ot=dest.side==='l'?teamE:teamJ; ot.filter(j=>j.alive&&j!==dest).forEach(j=>{if(Math.sqrt((j.x-dest.x)**2+(j.y-dest.y)**2)<90)j.takeDmg(1);}); spawnFloat('ANILLO!',dest.x,dest.y-20,'#cc9955'); } break;
+    case 'eight_ball': if(Math.random()<0.5){dmg=Math.round(dmg*3);spawnFloat('¡8-BALL CRÍTICO!',dest.x,dest.y-35,'#ffffff');}else{dmg=Math.max(1,Math.round(dmg*0.5));spawnFloat('8-ball flojo...',dest.x,dest.y-35,'#666666');} break;
+    case 'clay_ball': if(window._lastPowerupType){applyPowerup({id:window._lastPowerupType});spawnFloat('¡MOLDEADO!',dest.x,dest.y-35,'#ff1133');} break;
+    case 'gold_ball': sv._goldBallBonus=true; break; // +50% monedas, ver endGame
+    case 'diamond_ball': sv._diamondBallBonus=true; break; // +50% fichas, ver endGame
+    case 'chaosphere': { const effects=['mint_ball','volcano_ball','electroshock_ball','fire_ball','ice_ball','vintage_ball','cyber_ball','galaxy_ball','spike_ball','saturn_ball']; const pick=effects[Math.floor(Math.random()*effects.length)]; const fakeB={...b,id:pick,isEvil:false}; const oldSel=selectedBallSkin; selectedBallSkin=pick; dmg=applyBallSkinEffect(dmg,src,dest); selectedBallSkin=oldSel; spawnFloat('¡CHAOS: '+pick.toUpperCase()+'!',dest.x,dest.y-45,'#ff00ff'); } break;
+    case 'antiball': { const isAntipops=(src._copiedKey||src.key)==='antipops'; if(isAntipops){dmg=Math.round(dmg*3);src.heal(1);spawnFloat('ANTI-BALL x3!',dest.x,dest.y-35,'#cc00ff');} } break;
+    case 'popshead': { const bk=src._copiedKey||src.key; const isPopsFamily=bk==='pops'||bk==='antipops'; if(isPopsFamily){dmg=Math.round(dmg*5);spawnFloat('👑 CABEZA DE POPS x5!',dest.x,dest.y-35,'#ffe600');} } break;
+  }
+  return dmg;
+}
 const POWERUPS=[
   {id:'fireball',name:'🔥 FIREBALL',col:'#ff4400',desc:'+3 daño próximo tiro',duration:1},
   {id:'blastball',name:'💥 BLASTBALL',col:'#ff8800',desc:'AOE — daña al objetivo y adyacentes',duration:1},
@@ -4139,6 +4195,7 @@ function startBattle(){
     // bg already set above from arena type
   }
   ball={x:200,y:205,vx:0,vy:0,owner:teamJ[0],inFlight:false,dest:null,src:null,isPase:false,isWall:false,charge:0,frame:0,totalFrames:0,type:'normal',wobble:0,onGround:false,_free:false,_bounces:0};
+  if(selectedBallSkin==='draw_ball')ball.charge=1; // BUFF: carga inicial +1 gratis
   leaderBuffActive={};applyLeaderBuff();updHUD();msg('');$$('pwupDisplay').textContent='';
   if(isVersus()&&versusSimultaneous){
     // Tiempo real: ambos jugadores pueden actuar cuando tengan posesión del balón
@@ -4967,7 +5024,9 @@ function throwBall(src,dest,isPase,isCounter=false,spd=14){
     if(src)src._throwCooldown=THROW_COOLDOWN_FRAMES;
     const audreyNoBlock=src&&src.side==='l'&&leaderBuffActive.key==='audrey'&&!_audreyFirstThrowUsed;
     if(audreyNoBlock){_audreyFirstThrowUsed=true;spawnFloat('¡SIN CONTRA!',src.x+src.w/2,src.y-30,'#ff88bb');}
-    if(ball.type!=='speedball'&&!audreyNoBlock){const delay=Math.max(80,spd*16.67*.35);
+    const ghostNoBlock=src&&src.side==='l'&&['cloud_ball','ghost_ball','lowpoly_ball'].includes(selectedBallSkin)&&Math.random()<0.20;
+    if(ghostNoBlock)spawnFloat('¡ESQUIVA BLOQUEO!',src.x+src.w/2,src.y-30,'#aaddff');
+    if(ball.type!=='speedball'&&!audreyNoBlock&&!ghostNoBlock){const delay=Math.max(80,spd*16.67*.35);
       setTimeout(()=>{if(!ball.inFlight||ball.isPase)return;if(skipsShield){setTimeout(()=>doBlock(),200);return;}
         blockWin=true;blockSide=(dest&&dest.side)||(src&&src.side==='l'?'r':'l');$$('blockBig').style.display='block';const blockDur=(1.0+sv.lB*.4)*1000*(leaderBuffActive.key==='skips'?2:1);$$('blockFill').style.width='100%';$$('blockFill').style.transition=`width ${blockDur}ms linear`;setTimeout(()=>{$$('blockFill').style.width='0%';},10);
         clearTimeout(blockTimer);clearInterval(blockFillTimer);blockTimer=setTimeout(()=>{blockWin=false;$$('blockBig').style.display='none';},blockDur);},delay);}}
@@ -5003,7 +5062,7 @@ function onImpact(){
     // Bonus de RANGO+NIVEL: el personaje que lanza aplica su % de daño (según su rol) como multiplicador
     if(src&&src.key&&CHARS[src.key]){const bonusKey=src._copiedKey||src.key;const dmgBonus=roleBonusParts(bonusKey).dmg;if(dmgBonus>0)dmg=Math.round(dmg*(1+dmgBonus));}
     if(src&&src.side==='l'&&leaderBuffActive.key==='don'&&!_donFirstThrowUsed&&!ball.isPase){_donFirstThrowUsed=true;dmg+=2;spawnFloat('+2 SUGAR RUSH!',src.x+src.w/2,src.y-30,'#dd8844');}
-    if(src&&src.side==='l'){const activeSkin=BALL_SKINS.find(s=>s.id===selectedBallSkin);if(activeSkin&&activeSkin.isEvil){dmg*=2;spawnFloat('EVIL x2!',dest.x,dest.y-35,'#ff1133');}}
+    dmg=applyBallSkinEffect(dmg,src,dest);
     dest.takeDmg(dmg);msg('¡IMPACTO en '+(dest.nameEs&&_lang==='es'?dest.nameEs:dest.name)+'! -'+dmg+' HP'+(ball.type!=='normal'?' ['+ball.type.toUpperCase()+']':''));
     shakeF=10;shakeA=6;triggerHitFlash(ball.type==='fireball'?'#ff4400':ball.type==='poisonball'?'#00cc44':'#ffffff');if(dest.alive){ball.owner=dest;}ball.charge=0;
     if(src&&src.side==='l'){addRage('j',15+(ball.type!=='normal'?10:0));addCombo();}else{addRage('e',15);if(src&&src.side==='r')resetCombo();}
@@ -5107,7 +5166,8 @@ function endGame(win){
     const _srI=$$('resStats');if(_srI)_srI.innerHTML=`⚔ ${bStats.dmg} &nbsp; 🛡 ${bStats.blk} &nbsp; ⚡ ${bStats.cnt} &nbsp; 🔥 x${comboMax} &nbsp; ⏱ ${_emI}:${String(_esI).padStart(2,'0')}`;
     if(win===true){
       const reward=_infCoinReward(floor);
-      sv.coins+=reward;sv.wins=(sv.wins||0)+1;sv.gamesPlayed=(sv.gamesPlayed||0)+1;
+      sv.coins+=reward;sv._lastWinCoins=reward;sv.wins=(sv.wins||0)+1;sv.gamesPlayed=(sv.gamesPlayed||0)+1;
+      applyBallWinBonus();
       maybeDropWinChest();
       [...selectedChars].forEach(k=>addCharXp(k,20+floor*2));
       if(floor>(sv.infiniteBest||0))sv.infiniteBest=floor;
@@ -5149,7 +5209,8 @@ function endGame(win){
       onlineResult=_applyOnlineResult(actualWin);
     }
     const coinReward=mode==='online'||mode==='online_bot'?80:mode==='tournament'?200:mode==='story'?160:mode==='challenge'?100:120;
-    sv.coins+=coinReward;sv.wins=(sv.wins||0)+1;sv.gamesPlayed=(sv.gamesPlayed||0)+1;
+    sv.coins+=coinReward;sv._lastWinCoins=coinReward;sv.wins=(sv.wins||0)+1;sv.gamesPlayed=(sv.gamesPlayed||0)+1;
+    applyBallWinBonus();
     maybeDropWinChest();
     [...selectedChars].forEach(k=>addCharXp(k,30));
     if(comboMax>(sv.comboBest||0)){sv.comboBest=comboMax;if(comboMax>=10)sv.achievements['combo_king']=true;}
