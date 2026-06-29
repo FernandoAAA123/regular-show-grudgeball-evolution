@@ -4163,11 +4163,17 @@ function startBattle(){
     if(_netChannel||_onlineChannel||_rtcPC){try{_rtcClean();}catch(e){}}
     _netChannel=null;_onlineChannel=null;
   }
-  arenaType=ARENA_TYPES[Math.floor(Math.random()*ARENA_TYPES.length)];setupArena(arenaType);
-  // Set background linked to this arena type
-  const _bgId=ARENA_BG_MAP[arenaType]||'park';
-  const _bgIdx=ARENA_BACKGROUNDS.findIndex(b=>b.id===_bgId);
-  currentBgIndex=_bgIdx>=0?_bgIdx:0;currentBgImg=null;currentFloorImg=null;
+  if(myNetRole()==='guest'){
+    // El guest no sortea arena: la recibirá del host en el primer _applyGameState.
+    arenaType='normal';setupArena(arenaType);
+    currentBgIndex=0;currentBgImg=null;currentFloorImg=null;
+  }else{
+    arenaType=ARENA_TYPES[Math.floor(Math.random()*ARENA_TYPES.length)];setupArena(arenaType);
+    // Set background linked to this arena type
+    const _bgId=ARENA_BG_MAP[arenaType]||'park';
+    const _bgIdx=ARENA_BACKGROUNDS.findIndex(b=>b.id===_bgId);
+    currentBgIndex=_bgIdx>=0?_bgIdx:0;currentBgImg=null;currentFloorImg=null;
+  }
   const selArr=[...selectedChars].slice(0,3);
   teamJ=_spawnTeamFighters(selArr,'l');
   const epos=[[708,40],[708,180],[708,310]];
@@ -6023,14 +6029,21 @@ function _serializeGameState(){
     shakeF, shakeA,
     active,
     floorPowerups: floorPowerups.map(p=>({x:p.x,y:p.y,id:p.def.id,pulse:p.pulse})),
+    arenaType, currentBgIndex,
   };
 }
 
 // ── Aplicar estado recibido del host (en el guest) ────────
 function _applyGameState(s){
   if(!s||!teamJ||!teamE)return;
-  // Fighters
-  s.teamJ.forEach(d=>{const f=teamJ.find(f=>f.key===d.key);if(!f)return;
+  // El host siempre serializa "teamJ"=su propio equipo (izquierda en SU pantalla) y
+  // "teamE"=el rival (el guest). Para el GUEST, su teamJ local es su propio equipo
+  // (=el guest, ='teamE' visto por el host) y su teamE local es el rival (=el host).
+  // Por eso, si quien aplica esto es el guest, hay que CRUZAR los arrays.
+  const amGuest=myNetRole()==='guest';
+  const incomingForMyTeamJ=amGuest?s.teamE:s.teamJ;
+  const incomingForMyTeamE=amGuest?s.teamJ:s.teamE;
+  const applyTo=(arr,team)=>arr.forEach(d=>{const f=team.find(f=>f.key===d.key);if(!f)return;
     f.x=d.x;f.y=d.y;f.hp=d.hp;f.alive=d.alive;
     f.jumpH=d.jumpH;f.jumping=d.jumping;
     f._throwTimer=d._throwTimer;f._shieldTimer=d._shieldTimer;
@@ -6038,14 +6051,8 @@ function _applyGameState(s){
     f.hitFlash=d.hitFlash;f.frozen=d.frozen;f.poisoned=d.poisoned;
     f.scaleX=d.scaleX;f.scaleY=d.scaleY;
   });
-  s.teamE.forEach(d=>{const f=teamE.find(f=>f.key===d.key);if(!f)return;
-    f.x=d.x;f.y=d.y;f.hp=d.hp;f.alive=d.alive;
-    f.jumpH=d.jumpH;f.jumping=d.jumping;
-    f._throwTimer=d._throwTimer;f._shieldTimer=d._shieldTimer;
-    f._hurtTimer=d._hurtTimer;f._superTimer=d._superTimer;
-    f.hitFlash=d.hitFlash;f.frozen=d.frozen;f.poisoned=d.poisoned;
-    f.scaleX=d.scaleX;f.scaleY=d.scaleY;
-  });
+  applyTo(incomingForMyTeamJ,teamJ);
+  applyTo(incomingForMyTeamE,teamE);
   // Ball
   const b=s.ball;
   ball.x=b.x;ball.y=b.y;ball.vx=b.vx;ball.vy=b.vy;
@@ -6053,9 +6060,11 @@ function _applyGameState(s){
   ball.isPase=b.isPase;ball._free=b._free;
   ball.charge=b.charge;ball.type=b.type;
   ball.frame=b.frame;ball.totalFrames=b.totalFrames;
-  // Owner
+  // Owner — ownerSide viene desde la perspectiva del HOST ('l'=host, 'r'=guest).
+  // Para el guest, su propio equipo (teamJ local) corresponde a side 'r' del host.
   if(b.ownerKey){
-    const ownerTeam=b.ownerSide==='l'?teamJ:teamE;
+    const ownerIsHostTeam=b.ownerSide==='l';
+    const ownerTeam=amGuest?(ownerIsHostTeam?teamE:teamJ):(ownerIsHostTeam?teamJ:teamE);
     ball.owner=ownerTeam.find(f=>f.key===b.ownerKey)||null;
   } else { ball.owner=null; }
   // State
@@ -6065,6 +6074,8 @@ function _applyGameState(s){
   comboCount=s.comboCount;comboMax=s.comboMax;
   shakeF=s.shakeF;shakeA=s.shakeA;
   if(s.floorPowerups)floorPowerups=s.floorPowerups.map(p=>({x:p.x,y:p.y,pulse:p.pulse,def:POWERUPS.find(d=>d.id===p.id)})).filter(p=>p.def);
+  if(s.arenaType&&arenaType!==s.arenaType){arenaType=s.arenaType;setupArena(arenaType);}
+  if(typeof s.currentBgIndex==='number'&&currentBgIndex!==s.currentBgIndex){currentBgIndex=s.currentBgIndex;currentBgImg=null;currentFloorImg=null;}
   // UI
   updHUD();
   if(blockWin){$$('blockBig').style.display='block';}
