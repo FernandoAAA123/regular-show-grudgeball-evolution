@@ -4230,6 +4230,7 @@ function startBattle(){
 
   // ── Bifurcación host/guest para modo sala ──────────────
   const _netRole_=myNetRole();
+  console.log('[BRANCH] startBattle bifurcación: _netRole_=',_netRole_,'sv.gameMode=',sv.gameMode,'sv._netVersus=',sv._netVersus,'sv._netRole=',sv._netRole,'_netChannel=',!!_netChannel,'_netChannel.open=',_netChannel&&_netChannel.open);
   if(_netRole_==='host'){
     // Host: corre la lógica completa y transmite estado al guest
     gameLoop();
@@ -4241,6 +4242,7 @@ function startBattle(){
     active=true;
     _guestGameLoop();
   } else {
+    console.warn('[BRANCH] ¡CAYÓ AL ELSE LOCAL! Esto NO debería pasar en una partida de red.');
     gameLoop();
   }
 }
@@ -6088,6 +6090,7 @@ function _applyGameState(s){
 
 // ── Iniciar broadcast del host ────────────────────────────
 function _startHostBroadcast(){
+  console.log('[BRANCH] _startHostBroadcast() llamada. _netChannel=',!!_netChannel,'_onlineChannel=',!!_onlineChannel,'_netChannel.open=',_netChannel&&_netChannel.open,'_onlineChannel.open=',_onlineChannel&&_onlineChannel.open);
   if(_hostBroadcastTimer)clearInterval(_hostBroadcastTimer);
   if(!window._stateBroadcastLogged){window._stateBroadcastLogged=0;}
   _hostBroadcastTimer=setInterval(()=>{
