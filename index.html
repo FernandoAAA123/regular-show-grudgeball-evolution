@@ -3228,6 +3228,8 @@ function applyBallSkinEffect(dmg,src,dest){
   const id=b.isEvil?'evil_ball':b.id;
   switch(id){
     case 'evil_ball': dmg*=2; spawnFloat('EVIL x2!',dest.x,dest.y-35,'#ff1133'); break;
+    case 'flash_ball': /* +25% velocidad de tiro: aplicado directamente en throwBallFree, ver pxPerFrame */ break;
+    case 'thriller_ball': { const isPhase2=ball.charge>=(b.phaseAt??2); if(isPhase2){dest.poisoned=3;spawnFloat('¡INFECTADO!',dest.x,dest.y-20,'#8aff44');} } break;
     case 'mint_ball': src.heal(1); spawnFloat('+1 HP MENTA',src.x,src.y-20,'#88ffcc'); break;
     case 'volcano_ball': dmg+=1; spawnFloat('+1 VOLCANO',dest.x,dest.y-35,'#ff4422'); break;
     case 'electroshock_ball': if(Math.random()<0.20){dest.frozen=1;spawnFloat('¡PARALIZADO!',dest.x,dest.y-20,'#ffff00');} break;
@@ -4596,9 +4598,11 @@ function updSimBallBadges(){
 
 function charScreenReady(){
   if(isVersus()&&versusPhase===3){
-    // Network mode: both selections already set, go straight to battle
-    sv._versusJ1Chars=[...selectedChars];sv._versusJ1Leader=leaderKey;
-    sv._versusJ2Chars=[...selectedCharsJ2];sv._versusJ2Leader=leaderKeyJ2;
+    // Network mode (Versus por Sala / Online): _versusJ1Chars y _versusJ2Chars ya fueron
+    // seteados correctamente por _netLaunchGame() con las selecciones reales de host/guest.
+    // NO sobrescribir aquí con selectedCharsJ2/leaderKeyJ2 — esas variables son del Versus
+    // LOCAL en el mismo dispositivo y no tienen relación con el rival remoto. Sobrescribirlas
+    // causaba que sv._versusJ2Chars quedara vacío y startBattle() cayera al fallback de IA.
     versusPhase=0;
     startBattle();
     return;
@@ -4896,6 +4900,7 @@ function throwBallFree(src, dx, dy, charge){
   // Píxeles por frame — escala con el tamaño del canvas
   let pxPerFrame = (W * 0.055) * (1 + (charge||0) * 0.18);
   if(leaderBuffActive.key==='margaret'&&src&&src.side==='l')pxPerFrame*=1.18; // BUFF: Tiros +1 velocidad
+  if(src&&src.side==='l'&&selectedBallSkin==='flash_ball')pxPerFrame*=1.25; // BUFF: Flash Ball +25% velocidad de tiro
   ball.inFlight = true; ball._free = true; ball._bounces = 0;
   ball.src = src; ball.isPase = false; ball._angle = 0;
   ball.x = src.x+(src.w||0)/2;
