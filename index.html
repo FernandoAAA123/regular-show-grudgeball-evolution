@@ -4432,8 +4432,29 @@ function onPointerDown(e){
       window._guestDragStart={x:gx,y:gy};
       return;
     }
-    // Toque en portador / apuntar lanzamiento
-    window._guestAimStart={x:gx,y:gy};
+    // Toque en portador / apuntar lanzamiento.
+    // ── FIX BUG REAL: el guest NUNCA activaba `charging` ni armaba un
+    // `swipeArrow`, así que la flecha de apuntado y el anillo de carga
+    // (línea ~7231/7233 en drawScene, ambos gateados por la variable global
+    // `charging`) JAMÁS se dibujaban para J2 — el host sí los tiene desde
+    // siempre en su propio flujo. Sin esa señal visual, J2 no tenía forma
+    // de ver ni corregir hacia dónde apuntaba; el tiro "se sentía" como si
+    // fuera directo a un rival al azar, aunque la dirección sí se mandaba
+    // correctamente — el problema era 100% de feedback visual ausente.
+    const carrierForAim=(ball.owner&&!ball.inFlight&&myAllowedTeam().includes(ball.owner))?ball.owner:null;
+    if(carrierForAim){
+      window._guestAimStart={x:gx,y:gy};
+      ball.charge=0;charging=true;chargeLevel=0;
+      clearInterval(holdChargeTimer);
+      holdChargeTimer=setInterval(()=>{
+        if(!charging||chargeLevel>=MAX_CHARGE)return;
+        chargeLevel++;ball.charge=chargeLevel;
+      },360);
+      // La flecha SIEMPRE nace del centro del portador (igual que el host),
+      // no del punto exacto donde tocaste — así apunta visualmente bien
+      // sin importar en qué parte de la pantalla empezó el gesto.
+      swipeArrow={active:true,sx:carrierForAim.x+carrierForAim.w/2,sy:carrierForAim.y+carrierForAim.h/2,ex:gx,ey:gy};
+    }
     return;
   }
 
@@ -4523,6 +4544,17 @@ function onPointerMove(e){
     f.x=nx;f.y=ny;f.targetX=nx;f.targetY=ny;
     return;
   }
+  // GUEST: actualizar la flecha de apuntado mientras arrastra el dedo
+  // para lanzar (mismo feedback visual que ya tenía el host).
+  if(myNetRole()==='guest'&&window._guestAimStart){
+    const r2=cv.getBoundingClientRect();
+    const t2=(e.touches&&e.touches[0])||e;
+    const gxScreen=Math.max(0,Math.min(r2.width,t2.clientX-r2.left))*(W/r2.width);
+    const gx=W-gxScreen;
+    const gy=Math.max(0,Math.min(r2.height,t2.clientY-r2.top))*(H/r2.height);
+    if(swipeArrow.active&&!ball.inFlight){swipeArrow.ex=gx;swipeArrow.ey=gy;}
+    return;
+  }
   if(isVersus()&&versusSimultaneous){
     const touches=e.touches||[e];
     for(let ti=0;ti<touches.length;ti++){
@@ -4581,6 +4613,8 @@ function onPointerUp(e){
       const ddx=gx-sx, ddy=gy-sy;
       const dist=Math.sqrt(ddx*ddx+ddy*ddy);
       window._guestAimStart=null;
+      // Apagar feedback visual (anillo de carga + flecha) sea cual sea el desenlace
+      charging=false;swipeArrow.active=false;
       // Si no hubo arrastre significativo, ignorar (fue un simple tap)
       if(dist<14)return;
       // Buscar mi ficha portadora — SIEMPRE mi equipo real, no teamE fijo
