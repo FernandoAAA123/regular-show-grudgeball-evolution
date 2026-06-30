@@ -4401,6 +4401,14 @@ function onPointerDown(e){
           const nearest=myTeamPick.reduce((a,b)=>
             Math.hypot(a.x+a.w/2-ball.x,a.y+a.h/2-ball.y)<Math.hypot(b.x+b.w/2-ball.x,b.y+b.h/2-ball.y)?a:b);
           console.log('[NET][GUEST] pickup ENVIADO con key=',nearest.key);
+          // FIX BUG REAL: el guest solo enviaba el input y esperaba a que el host
+          // lo confirmara por la red (ida+vuelta + siguiente broadcast, ~50-100ms)
+          // antes de que ball.owner cambiara — por eso se sentía "trabado" o como
+          // si nunca recogiera, a diferencia de J1 que lo hace instantáneo y local.
+          // Aplicamos el pickup OPTIMISTA aquí mismo (igual que J1) para feedback
+          // inmediato; el host de todas formas confirma/corrige en el próximo
+          // _applyGameState si hubiera alguna discrepancia.
+          ball.owner=nearest;ball.onGround=false;spawnFloat('¡RECOGIDO!',ball.x,ball.y,'#00d4ff');
           _guestSendInput('pickup',{key:nearest.key});
         }
         return;
@@ -4757,6 +4765,19 @@ function onPointerDownJ1(x,y){
   touchStart={x,y,time:Date.now(),target:null,targetType:null};isDragging=false;
   if(ball.inFlight)return;
   for(let i=floorPowerups.length-1;i>=0;i--){const p=floorPowerups[i];if(x<W/2&&Math.abs(x-p.x)<24&&Math.abs(y-p.y)<24){applyPowerup(p.def);floorPowerups.splice(i,1);return;}}
+  // FIX BUG REAL: esta función (usada en Versus Simultáneo en el mismo dispositivo)
+  // nunca tuvo el check de "recoger el balón al tocarlo cerca" que sí existe en el
+  // flujo principal onPointerDown (línea ~4498). Por eso J1 en este modo tampoco
+  // podía recoger naturalmente — se agrega aquí el mismo radio/lógica.
+  if(ball.onGround&&!ball.inFlight&&!ball.owner){
+    const bdx=x-ball.x,bdy=y-ball.y;
+    if(Math.sqrt(bdx*bdx+bdy*bdy)<48){
+      const vivos=teamJ.filter(j=>j.alive);
+      const nearest=vivos.reduce((a,b)=>Math.hypot(a.x+a.w/2-ball.x,a.y+a.h/2-ball.y)<Math.hypot(b.x+b.w/2-ball.x,b.y+b.h/2-ball.y)?a:b,vivos[0]);
+      if(nearest){ball.owner=nearest;ball.onGround=false;spawnFloat('¡RECOGIDO!',ball.x,ball.y,'#00d4ff');}
+      return;
+    }
+  }
   // J1: puede arrastrar SOLO teamJ (nunca teamE)
   const hitAllyAny=hitFighter(teamJ,x,y,44);if(hitAllyAny){dragFighter=hitAllyAny;isDragging=true;hitAllyAny.isDragged=true;touchStart.target=hitAllyAny;touchStart.targetType='ally';return;}
   // J1: puede APUNTAR/DISPARAR al rival (solo toque, no arrastre)
@@ -4770,6 +4791,18 @@ function onPointerDownJ1(x,y){
 function onPointerDownJ2(x,y){
   touchStartJ2={x,y,time:Date.now(),target:null,targetType:null};isDraggingJ2=false;
   if(ball.inFlight)return;
+  // FIX BUG REAL: J2 (Versus Simultáneo, mismo dispositivo) tampoco tenía el
+  // check de "recoger el balón al tocarlo cerca" — esto explica por qué J2
+  // nunca podía levantar la pelota "naturalmente como J1" en este modo.
+  if(ball.onGround&&!ball.inFlight&&!ball.owner){
+    const bdx=x-ball.x,bdy=y-ball.y;
+    if(Math.sqrt(bdx*bdx+bdy*bdy)<48){
+      const vivos=teamE.filter(j=>j.alive);
+      const nearest=vivos.reduce((a,b)=>Math.hypot(a.x+a.w/2-ball.x,a.y+a.h/2-ball.y)<Math.hypot(b.x+b.w/2-ball.x,b.y+b.h/2-ball.y)?a:b,vivos[0]);
+      if(nearest){ball.owner=nearest;ball.onGround=false;spawnFloat('¡RECOGIDO!',ball.x,ball.y,'#ff2277');}
+      return;
+    }
+  }
   // J2: puede arrastrar SOLO teamE (nunca teamJ)
   const hitAllyAny=hitFighter(teamE,x,y,44);if(hitAllyAny){dragFighterJ2=hitAllyAny;isDraggingJ2=true;hitAllyAny.isDragged=true;touchStartJ2.target=hitAllyAny;touchStartJ2.targetType='ally';return;}
   // J2: puede APUNTAR/DISPARAR al rival (solo toque, no arrastre)
