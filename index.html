@@ -4409,6 +4409,7 @@ function onPointerDown(e){
           // inmediato; el host de todas formas confirma/corrige en el próximo
           // _applyGameState si hubiera alguna discrepancia.
           ball.owner=nearest;ball.onGround=false;spawnFloat('¡RECOGIDO!',ball.x,ball.y,'#00d4ff');
+          window._guestOptimisticPickupUntil=Date.now()+300;
           _guestSendInput('pickup',{key:nearest.key});
         }
         return;
@@ -4629,12 +4630,21 @@ function onPointerUp(e){
       const myTeamGuest2=myAllowedTeam();const oppTeamGuest2=myTeamGuest2===teamJ?teamE:teamJ;
       const carrier=myTeamGuest2.find(f=>f.alive&&ball.owner===f);
       if(carrier){
+        // FIX BUG REAL: antes la dirección del tiro se calculaba como el vector
+        // del SWIPE (sx,sy)→(gx,gy), que NO coincide con la flecha dibujada en
+        // pantalla (la flecha va del portador hasta el dedo, igual que J1/host —
+        // ver onPointerUp local, "throwBallFree(pos, x-ox, y-oy, ...)"). Por eso
+        // J2 apuntaba "a ciegas": tirabas hacia donde decía la flecha pero la
+        // pelota salía en otra dirección. Ahora se usa la misma referencia que
+        // el host: portador → punto de release.
+        const ox=carrier.x+carrier.w/2, oy=carrier.y+carrier.h/2-(carrier.jumpH||0);
+        const fdx=gx-ox, fdy=gy-oy;
         // Intentar lanzamiento dirigido (a un rival real) si el swipe termina cerca de uno
         const tgt=hitFighter(oppTeamGuest2,gx,gy,50);
         if(tgt&&tgt.alive){
           _guestSendInput('throw',{srcKey:carrier.key,dstKey:tgt.key,charge:ball.charge||0,ballType:ball.type||'normal',spd:14});
         }else{
-          _guestSendInput('throwFree',{srcKey:carrier.key,dx:ddx,dy:ddy,charge:ball.charge||0,ballType:ball.type||'normal'});
+          _guestSendInput('throwFree',{srcKey:carrier.key,dx:fdx,dy:fdy,charge:ball.charge||0,ballType:ball.type||'normal'});
         }
       }
       return;
@@ -6241,13 +6251,33 @@ function _applyGameState(s){
   // Ball
   const b=s.ball;
   ball.x=b.x;ball.y=b.y;ball.vx=b.vx;ball.vy=b.vy;
+  // FIX BUG REAL: justo después de un pickup optimista local (ver onPointerDown,
+  // rama GUEST), el host puede mandar 1-2 paquetes de estado que TODAVÍA no
+  // reflejan ese pickup (no llegó/procesó a tiempo). Sin esta protección, esos
+  // paquetes atrasados pisaban ball.owner/onGround de vuelta a "en el suelo",
+  // y el jugador tenía que tocar varias veces hasta que por suerte coincidiera
+  // la ventana — eso era la "dificultad para recoger" reportada. Se ignora el
+  // estado de balón entrante por una ventana corta tras el pickup optimista.
+  const _guestPickupProtected=amGuest&&window._guestOptimisticPickupUntil&&Date.now()<window._guestOptimisticPickupUntil;
+  if(_guestPickupProtected){
+    if(b.ownerKey){
+      // Si el host ya confirma ESTE pickup (mismo dueño), se puede soltar la protección ya.
+      const ownerIsHostTeam2=b.ownerSide==='l';
+      const ownerTeam2=ownerIsHostTeam2?teamE:teamJ;
+      const confirmedOwner=ownerTeam2.find(f=>f.key===b.ownerKey);
+      if(confirmedOwner&&confirmedOwner===ball.owner)window._guestOptimisticPickupUntil=0;
+    }
+  } else {
   ball.inFlight=b.inFlight;ball.onGround=b.onGround;
+  }
   ball.isPase=b.isPase;ball._free=b._free;
-  ball.charge=b.charge;ball.type=b.type;
+  ball.charge=(charging&&window._guestAimStart)?ball.charge:b.charge;ball.type=b.type;
   ball.frame=b.frame;ball.totalFrames=b.totalFrames;
   // Owner — ownerSide viene desde la perspectiva del HOST ('l'=host, 'r'=guest).
   // Para el guest, su propio equipo (teamJ local) corresponde a side 'r' del host.
-  if(b.ownerKey){
+  if(_guestPickupProtected){
+    // mantener el owner optimista local, no pisarlo todavía
+  } else if(b.ownerKey){
     const ownerIsHostTeam=b.ownerSide==='l';
     const ownerTeam=amGuest?(ownerIsHostTeam?teamE:teamJ):(ownerIsHostTeam?teamJ:teamE);
     ball.owner=ownerTeam.find(f=>f.key===b.ownerKey)||null;
