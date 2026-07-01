@@ -5077,6 +5077,14 @@ function throwBallFree(src, dx, dy, charge){
   ball.vy = ny * pxPerFrame;
   ball.totalFrames = Math.round(baseSpd * 3.5); // vida máxima en frames
   ball.frame = 0; ball.wobble = 0;
+  // Skin del lanzador: en sala cada jugador usa su propia ball elegida
+  if(src){
+    if(window._hostBallSkin&&window._guestBallSkin){
+      ball.activeSkinId=src.side==='l'?window._hostBallSkin:window._guestBallSkin;
+    } else {
+      ball.activeSkinId=selectedBallSkin||'default';
+    }
+  }
   // Destino virtual lejano (solo para que onImpact tenga referencia)
   ball.dest = {x: ball.x + nx*W*3, y: ball.y + ny*H*3,
                w:0, h:0, alive:false, side:'none', jumping:false};
@@ -5195,6 +5203,14 @@ function throwBall(src,dest,isPase,isCounter=false,spd=14){
   ball.inFlight=true;ball.src=src;ball.dest=dest;ball.isPase=isPase;ball._angle=0;
   ball.x=src.x+(src.w||0)/2;ball.y=src.y+(src.h||0)/2-(src.jumpH||0);
   const tx=dest.x+(dest.w||0)/2,ty=dest.y+(dest.h||0)/2;ball.totalFrames=spd;ball.frame=0;ball.vx=(tx-ball.x)/spd;ball.vy=(ty-ball.y)/spd;ball.wobble=0;
+  // Skin del lanzador: en sala cada jugador usa su propia ball elegida
+  if(src){
+    if(window._hostBallSkin&&window._guestBallSkin){
+      ball.activeSkinId=src.side==='l'?window._hostBallSkin:window._guestBallSkin;
+    } else {
+      ball.activeSkinId=selectedBallSkin||'default';
+    }
+  }
   if(src&&src._throwTimer!==undefined)src._throwTimer=22;
   if(src&&src.side==='l'&&!isPase&&!isCounter)sfxThrow();
   // ── PASO 2: tiempo real — ya no se "pasa el turno" al lanzar.
@@ -5824,6 +5840,10 @@ async function _rtcCreatePeer(role, roomId, onMsg, onDisconnect){
     const offer=await pc.createOffer();
     await pc.setLocalDescription(offer);
     await window._fbRtdbSet(window._fbRtdbRef('rooms/'+roomId+'/offer'), {type:offer.type,sdp:offer.sdp});
+    // Guardar timestamp de creación para que la limpieza automática pueda borrar salas viejas
+    await window._fbRtdbSet(window._fbRtdbRef('rooms/'+roomId+'/createdAt'), Date.now());
+    // Auto-borrar la sala si el host se desconecta antes de que llegue un guest
+    window._fbRtdbOnDisconnectRemove(window._fbRtdbRef('rooms/'+roomId));
     console.log('[RTC] Offer publicada (host), roomId='+roomId);
 
     // 2. Escuchar answer del guest
@@ -5894,7 +5914,7 @@ async function _rtcCreatePeer(role, roomId, onMsg, onDisconnect){
   return true;
 }
 
-function showOnlineMode(){$$('onlineModal').style.display='flex';_buildOnlineHome();}
+function showOnlineMode(){$$('onlineModal').style.display='flex';_buildOnlineHome();_cleanStaleRooms();}
 function closeOnlineModal(){$$('onlineModal').style.display='none';_mmCancel();}
 
 function _buildOnlineHome(){
@@ -5972,15 +5992,53 @@ function _mmSetStatus(txt,col){const el=$$('mmStatus');if(el){el.textContent=txt
 
 let _mmUnsubQueue=null,_mmMyQueueRef=null,_mmRoomId=null;
 
+// ── Limpieza de salas huérfanas ──────────────────────────
+// Borra todas las entradas de /rooms/ cuyo campo createdAt
+// tenga más de 5 minutos de antigüedad (salas donde el host
+// se desconectó antes de que llegara un guest, o donde WebRTC
+// nunca completó el handshake). Se ejecuta al abrir el modal
+// online y al iniciar una búsqueda de partida.
+async function _cleanStaleRooms(){
+  if(!window._fbRtdbRef||!window._fbRtdbGet)return;
+  const STALE_MS=5*60*1000; // 5 minutos
+  try{
+    const snap=await window._fbRtdbGet(window._fbRtdbRef('rooms'));
+    if(!snap||!snap.exists||!snap.exists())return;
+    const now=Date.now();
+    const toDelete=[];
+    snap.forEach(child=>{
+      const val=child.val();
+      // Borrar si: tiene createdAt antiguo, o no tiene createdAt (salas pre-fix muy viejas)
+      if(!val||!val.createdAt||(now-val.createdAt>STALE_MS)){
+        toDelete.push(child.key);
+      }
+    });
+    if(!toDelete.length)return;
+    console.log('[CLEANUP] Borrando',toDelete.length,'sala(s) inactiva(s):',toDelete);
+    await Promise.all(toDelete.map(k=>window._fbRtdbRemove(window._fbRtdbRef('rooms/'+k))));
+  }catch(e){
+    console.warn('[CLEANUP] Error al limpiar salas:',e.message);
+  }
+}
+
 function _mmStartSearch(){
   if(_mmSearching)return;
   if(!window._fbRtdbRef){
     toast('Firebase not configured — practice mode', '#cc44ff');
     _mmLaunchBotMatch();return;
   }
+  // DIAGNÓSTICO: verificar auth antes de buscar
+  if(!window._fbUid){
+    console.warn('[MM] Sin UID de Firebase — ranked requiere login.');
+    toast('Inicia sesión para jugar ranked','#ff4444');
+    return;
+  }
   _mmSearching=true;
   _buildOnlineSearching();
   _mmSetStatus('Conectando al servidor...','#ff8800');
+  console.log('[MM] _mmStartSearch: uid=',window._fbUid,'pts=',( sv.onlineRank||{}).pts||0);
+  // Limpiar salas huérfanas de /rooms/ con más de 5 minutos de antigüedad
+  _cleanStaleRooms();
 
   const myUid=window._fbUid||('guest_'+Math.random().toString(36).slice(2,9));
   const myPts=(sv.onlineRank||{}).pts||0;
@@ -6036,6 +6094,7 @@ function _mmWatchQueue(myTicket,myUid,myPts){
   // debo abrir la sala WebRTC proactivamente y esperar.
   // Para evitar condiciones de carrera, abrimos la sala host SIEMPRE,
   // en paralelo a buscar candidatos; si nadie la usa, no pasa nada.
+  console.log('[MM] Abriendo sala host con ticket=',myTicket);
   _mmOpenHostRoom(myTicket,myUid,myPts);
 }
 
@@ -6046,6 +6105,9 @@ async function _mmOpenHostRoom(myTicket,myUid,myPts){
     ()=>_onPeerDisconnect()
   );
   if(!ok)return;
+  // Guardar timestamp para limpieza de salas huérfanas
+  try{window._fbRtdbSet(window._fbRtdbRef('rooms/'+myTicket+'/createdAt'),Date.now());}catch(e){}
+  try{window._fbRtdbOnDisconnectRemove(window._fbRtdbRef('rooms/'+myTicket));}catch(e){}
   // Esperar a que el datachannel se abra (= un guest se conectó)
   const checkOpen=setInterval(()=>{
     if(!_mmSearching){clearInterval(checkOpen);return;}
@@ -6061,6 +6123,7 @@ async function _mmOpenHostRoom(myTicket,myUid,myPts){
 }
 
 async function _mmJoinAsGuest(roomId){
+  console.log('[MM] Uniéndose como GUEST a sala roomId=',roomId);
   const ok=await _rtcCreatePeer('guest',roomId,
     (msg)=>_handleOnlineSync(msg),
     ()=>_onPeerDisconnect()
@@ -6075,6 +6138,7 @@ async function _mmJoinAsGuest(roomId){
     if(_onlineChannel&&_onlineChannel.open){
       clearInterval(checkOpen);
       _mmSetStatus('¡Conectado! Elige tu equipo.','#00ff88');
+      console.log('[MM] Canal online ABIERTO como guest. Lanzando juego...');
       setTimeout(()=>_mmLaunchOnlineGame('guest'),500);
     }
   },300);
@@ -6135,8 +6199,7 @@ function _mmLaunchOnlineGame(role){
 
 function _onlineCharReady(){
   if(!_onlineChannel||!_onlineChannel.open){toast('No connection with rival','#ff4444');return;}
-  const mySel={chars:[...selectedChars],leader:leaderKey};
-  _onlineChannel.send({type:'selection_ready',data:mySel});
+  const mySel={chars:[...selectedChars],leader:leaderKey,ballSkin:selectedBallSkin||'default'};
   const btn=$$('charReadyBtn');if(btn){btn.textContent='WAITING FOR RIVAL...';btn.disabled=true;btn.style.opacity='.5';}
   const waitId=setInterval(()=>{
     if(_onlineRivalSelection){
@@ -6148,6 +6211,8 @@ function _onlineCharReady(){
       selectedChars=new Set(mySel.chars);leaderKey=mySel.leader||mySel.chars[0];
       sv._versusJ1Chars=hostSel.chars;sv._versusJ1Leader=hostSel.leader;
       sv._versusJ2Chars=guestSel.chars;sv._versusJ2Leader=guestSel.leader;
+      window._hostBallSkin=hostSel.ballSkin||'default';
+      window._guestBallSkin=guestSel.ballSkin||'default';
       versusPhase=0;sv._onlineVersusRole=_onlineRole;
       startBattle();
     }
@@ -6193,6 +6258,7 @@ function _serializeGameState(){
       charge:ball.charge, type:ball.type||'normal',
       ownerKey, ownerSide,
       frame:ball.frame, totalFrames:ball.totalFrames,
+      activeSkinId:ball.activeSkinId||null,
     },
     turnJ, rageJ:Math.round(rageJ), rageE:Math.round(rageE),
     blockWin, counterWin,
@@ -6272,6 +6338,7 @@ function _applyGameState(s){
   }
   ball.isPase=b.isPase;ball._free=b._free;
   ball.charge=(charging&&window._guestAimStart)?ball.charge:b.charge;ball.type=b.type;
+  if(b.activeSkinId)ball.activeSkinId=b.activeSkinId;
   ball.frame=b.frame;ball.totalFrames=b.totalFrames;
   // Owner — ownerSide viene desde la perspectiva del HOST ('l'=host, 'r'=guest).
   // Para el guest, su propio equipo (teamJ local) corresponde a side 'r' del host.
@@ -6396,11 +6463,23 @@ function _sendOnlineAction(type,data){_sendNetAction(type,data);}
 
 function _handleOnlineSync(msg){
   if(!msg||!msg.type)return;
+  // Intercambio de selección de personajes (pre-partida)
   if(msg.type==='selection_ready'){_onlineRivalSelection=msg.data;return;}
-  // Resto de tipos (input/state/toast/float/endGame) comparten exactamente
-  // la misma lógica que el modo Versus P2P por sala — un solo handler genérico
-  // evita que ambos sistemas se desincronicen entre sí (causa del bug original).
-  _handleNetVsMsg(msg);
+
+  // ── HOST recibe inputs del guest ───────────────────────
+  if(msg.type==='input'&&myNetRole()==='host'){
+    _hostApplyInput(msg.action,msg.data||{});
+    return;
+  }
+  // ── GUEST recibe estado del host ───────────────────────
+  if(msg.type==='state'&&myNetRole()==='guest'){
+    _applyGameState(msg.data);
+    return;
+  }
+  // ── Mensajes auxiliares ────────────────────────────────
+  if(msg.type==='toast'){toast(msg.msg,msg.col||'#00d4ff');return;}
+  if(msg.type==='float'){spawnFloat(msg.text,msg.x,msg.y,msg.col||'#fff');return;}
+  if(msg.type==='endGame'){endGame(myNetRole()==='host'?msg.hostWon:!msg.hostWon);return;}
 }
 // ═══════════════════════════════════════════════════════════
 // MODO INFINITO
@@ -6784,7 +6863,7 @@ function _netStartConnectedGame(role,room){
 
 function _netCharReady(){
   if(!_netChannel||!_netChannel.open){toast('No connection with rival','#ff4444');return;}
-  const mySel={chars:[...selectedChars],leader:leaderKey};
+  const mySel={chars:[...selectedChars],leader:leaderKey,ballSkin:selectedBallSkin||'default'};
   if(_netRole==='host'){
     _netHostSelection=mySel;
     _netChannel.send({type:'host_selection',data:mySel});
@@ -6807,6 +6886,9 @@ function _netLaunchGame(hostSel,guestSel){
   selectedChars=new Set(mySel.chars);leaderKey=mySel.leader||mySel.chars[0];
   sv._versusJ1Chars=hostSel.chars;sv._versusJ1Leader=hostSel.leader;
   sv._versusJ2Chars=guestSel.chars;sv._versusJ2Leader=guestSel.leader;
+  // Guardar la skin elegida por cada jugador para usarla según quién lanza
+  window._hostBallSkin=hostSel.ballSkin||'default';
+  window._guestBallSkin=guestSel.ballSkin||'default';
   versusPhase=3;
   // Llamar a startBattle — luego en startBattle se bifurca según rol
   charScreenReady();
@@ -7364,9 +7446,11 @@ function drawBall(){
     }
   }
 
-  // Get current ball skin image — algunos balones (ej. Thriller Ball) tienen
-  // 2 fases/imágenes que cambian según el nivel de carga del tiro.
-  const activeSkin=BALL_SKINS.find(s=>s.id===selectedBallSkin)||BALL_SKINS[0];
+  // Get current ball skin image — usa la skin del LANZADOR (ball.activeSkinId)
+  // para que en modo sala cada jugador vea su propia ball, no la del rival.
+  // Cuando el balón está en el suelo / sin dueño, usa la skin local del jugador.
+  const _skinIdToShow=ball.activeSkinId||selectedBallSkin||'default';
+  const activeSkin=BALL_SKINS.find(s=>s.id===_skinIdToShow)||BALL_SKINS[0];
   const usePhase2=activeSkin.imgUrl2&&ball.charge>=(activeSkin.phaseAt??2);
   const activeUrl=usePhase2?activeSkin.imgUrl2:activeSkin.imgUrl;
   const ballImg=activeUrl?getBallImg(activeUrl):null;
