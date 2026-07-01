@@ -1879,6 +1879,12 @@ body.mode-pc #sModes > *{
 'use strict';
 // ═══════════════════ IMAGE CACHE ═══════════════════
 const imgCache={};
+// Imágenes de escudo compartidas: reemplazan los círculos/emoji dibujados en canvas
+// por el sprite real del escudo (y su versión destruida cuando se rompe la armadura/bloqueo).
+const SHIELD_IMG_SRC='https://chibi.iitranq.co.uk/7YLmdQ8K94SG.png';
+const SHIELD_BROKEN_IMG_SRC='https://chibi.iitranq.co.uk/5no6dcmuK3aj.png';
+let shieldImg=null,shieldBrokenImg=null;
+function ensureShieldImgs(){if(!shieldImg)shieldImg=loadImg(SHIELD_IMG_SRC);if(!shieldBrokenImg)shieldBrokenImg=loadImg(SHIELD_BROKEN_IMG_SRC);}
 function proxyUrl(src){
   if(!src)return src;
   if(src.includes('wikia.nocookie.net')||src.includes('fandom.com')||src.includes('chibi.iitranq.co.uk'))
@@ -1916,6 +1922,8 @@ let sv={
   ballShards:{},                   // fichas ÚNICAS por balón: {ballId: cantidad}
   chests:0,                        // cofres sin abrir
   lastDailyChestTs:0,              // timestamp del último cofre diario reclamado
+  selectedSuper:{},                // super activo elegido por personaje: {charKey: 1|2} — ver SUPER2_UNLOCK_LV
+  seenSuper2:{},                   // marca qué personajes ya vieron el aviso de "2do super desbloqueado"
 };
 window.sv=sv; // ── FIX: exponer sv a window para que el módulo Firebase pueda leerlo/guardarlo ──
 // Costo en fichas para desbloquear un personaje, según su rareza
@@ -1968,6 +1976,8 @@ const RARITY_COLOR={common:'#8899aa',rare:'#3399ff',epic:'#cc44ff',legendary:'#f
 function loadSv(){
   try{const d=localStorage.getItem(SK);if(d)Object.assign(sv,JSON.parse(d));}catch(e){} // FIX: mutar en lugar de reemplazar, así window.sv sigue apuntando al mismo objeto
   if(!sv.unlockedChars)sv.unlockedChars=Object.entries(CHARS).filter(([k,c])=>c.unlocked).map(([k])=>k);
+  if(!sv.selectedSuper)sv.selectedSuper={};
+  if(!sv.seenSuper2)sv.seenSuper2={};
   selectedBallSkin=sv.equippedBall||'default';
   (sv.unlockedBalls||['default']).forEach(id=>{const b=BALL_SKINS.find(x=>x.id===id);if(b)b.unlocked=true;});
   refreshUI();
@@ -2742,7 +2752,7 @@ function showProfile(){
 }
 function closeSettings(){$$('settingsModal').style.display='none';}
 function resetProgress(){
-  sv={coins:0,tickets:0,lF:1,lV:1,lR:1,lB:1,unlockedChars:null,unlockedBalls:null,equippedBall:'default',wins:0,gamesPlayed:0,charLevels:{},charXp:{},charRanks:{},storyChapter:0,tournamentRound:0,gameMode:'quick',infiniteFloor:1,infiniteBest:0,challengeProgress:{},dailySeed:0,dailyDone:[],achievements:{},comboBest:0,storyProgress:{},charShards:{},ballShards:{},chests:0,lastDailyChestTs:0};
+  sv={coins:0,tickets:0,lF:1,lV:1,lR:1,lB:1,unlockedChars:null,unlockedBalls:null,equippedBall:'default',wins:0,gamesPlayed:0,charLevels:{},charXp:{},charRanks:{},storyChapter:0,tournamentRound:0,gameMode:'quick',infiniteFloor:1,infiniteBest:0,challengeProgress:{},dailySeed:0,dailyDone:[],achievements:{},comboBest:0,storyProgress:{},charShards:{},ballShards:{},chests:0,lastDailyChestTs:0,selectedSuper:{},seenSuper2:{}};
   window.sv=sv; // FIX: re-sincronizar window.sv ya que aquí sv se reemplaza por un objeto nuevo
   // Re-sincroniza los flags .unlocked en memoria a su valor por defecto de cada definición
   Object.values(CHARS).forEach(c=>{c.unlocked=!!c._defaultUnlocked;});
@@ -2798,6 +2808,9 @@ function mkSprites(idle,walk,throwImg,shield,hurt,superImg){
   };
 }
 
+// Nivel mínimo requerido para desbloquear el 2do super/habilidad especial de un personaje
+// (declarado aquí, antes de CHARS, porque las fichas de personajes lo referencian directamente)
+const SUPER2_UNLOCK_LV=15;
 const CHARS={
   //MORDECAI
   mordecai:{
@@ -2813,7 +2826,8 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/3/3e/Mordecai_scared.png/revision/latest/scale-to-width-down/200',            // hurt
       'https://static.wikia.nocookie.net/regularshow/images/5/59/Mordecai_angry.png/revision/latest/scale-to-width-down/200'              // super
     ),
-    super:'MORDO BLAST',superFn:'superMordecai',leaderBuff:'BUFF: Todo el equipo +1 daño'
+    super:'MORDO BLAST',superFn:'superMordecai',leaderBuff:'BUFF: Todo el equipo +1 daño',
+    super2:'SKY STRIKE',super2Fn:'superMordecai2',super2Unlock:SUPER2_UNLOCK_LV
   },
   //RIGBY
   rigby:{
@@ -2829,7 +2843,8 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/4/49/Rigby_scared.png/revision/latest/scale-to-width-down/200',               // hurt
       'https://static.wikia.nocookie.net/regularshow/images/3/33/Rigby_angry.png/revision/latest/scale-to-width-down/200'                 // super
     ),
-    super:'TECH KWON DO',superFn:'superRigby',leaderBuff:'BUFF: Pases +50% velocidad'
+    super:'TECH KWON DO',superFn:'superRigby',leaderBuff:'BUFF: Pases +50% velocidad',
+    super2:'DOBLE KWON DO',super2Fn:'superRigby2',super2Unlock:SUPER2_UNLOCK_LV
   },
  //SKIPS
   skips:{
@@ -2845,7 +2860,8 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/5/5c/Skips_thinking.png/revision/latest/scale-to-width-down/200',// hurt
       'https://static.wikia.nocookie.net/regularshow/images/c/c0/Skips_fighting.png/revision/latest/scale-to-width-down/200'// super
     ),
-    super:'BIONIC BARRIER',superFn:'superSkips',leaderBuff:'BUFF: Ventana de bloqueo x2'
+    super:'BIONIC BARRIER',superFn:'superSkips',leaderBuff:'BUFF: Ventana de bloqueo x2',
+    super2:'SABIDURÍA ANCIANA',super2Fn:'superSkips2',super2Unlock:SUPER2_UNLOCK_LV
   },
  //BENSON
   benson:{
@@ -2861,7 +2877,8 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/6/64/Benson_shocked.png/revision/latest/scale-to-width-down/200',             // hurt
       'https://static.wikia.nocookie.net/regularshow/images/4/4e/Benson_yelling.png/revision/latest/scale-to-width-down/200'              // super
     ),
-    super:'RAGE BURST',superFn:'superBenson',leaderBuff:'BUFF: Rabia +30% más rápido'
+    super:'RAGE BURST',superFn:'superBenson',leaderBuff:'BUFF: Rabia +30% más rápido',
+    super2:'SOBRECARGA DE PAPELEO',super2Fn:'superBenson2',super2Unlock:SUPER2_UNLOCK_LV
   },
   //POPS
   pops:{
@@ -2877,7 +2894,8 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/1/1a/Pops_scared.png/revision/latest/scale-to-width-down/200',               // hurt
       'https://static.wikia.nocookie.net/regularshow/images/3/38/Pops_fighting.png/revision/latest/scale-to-width-down/200'               // super
     ),
-    super:'JOLLY GOOD!',superFn:'superPops',leaderBuff:'BUFF: Curación +1 HP cada 2 turnos'
+    super:'JOLLY GOOD!',superFn:'superPops',leaderBuff:'BUFF: Curación +1 HP cada 2 turnos',
+    super2:'DUELO CABALLEROSO',super2Fn:'superPops2',super2Unlock:SUPER2_UNLOCK_LV
   },
   //MUSCLEMAN
   muscleman:{
@@ -2893,7 +2911,8 @@ const CHARS={
       'https://static.wikia.nocookie.net/regularshow/images/f/f1/Muscle_Man_sad.png/revision/latest/scale-to-width-down/200',             // hurt
       'https://static.wikia.nocookie.net/regularshow/images/1/18/Muscle_Man_angry.png/revision/latest/scale-to-width-down/200'            // super
     ),
-    super:'MY MOM!!',superFn:'superMuscle',leaderBuff:'BUFF: Tiros cargados +2 daño'
+    super:'MY MOM!!',superFn:'superMuscle',leaderBuff:'BUFF: Tiros cargados +2 daño',
+    super2:'QUÉ ASCO',super2Fn:'superMuscle2',super2Unlock:SUPER2_UNLOCK_LV
   },
  //HI FIVE
   hifive_ghost:{
@@ -3412,11 +3431,15 @@ function startChallengeBattle(divId,ch){
 }
 
 // ═══════════════════ CHARACTER LEVELS ═══════════════════
-const XP_PER_LEVEL=100,MAX_CHAR_LEVEL=10;
+const XP_PER_LEVEL=100,MAX_CHAR_LEVEL=25;
+// PASO: nivel máximo subido de 10 → 25. Se reescala el incremento por nivel para que el
+// bono máximo total siga siendo el mismo que antes (1.8 en el nivel máximo), solo que ahora
+// repartido en más niveles → progresión más gradual y grindeable, sin romper el balance.
+const LV_BONUS_MAX=1.8,LV_BONUS_STEP=LV_BONUS_MAX/(MAX_CHAR_LEVEL-1);
 function charLevel(k){return Math.min(MAX_CHAR_LEVEL,sv.charLevels[k]||1);}
 function charXp(k){return sv.charXp[k]||0;}
 function xpToNext(k){const lv=charLevel(k);return lv>=MAX_CHAR_LEVEL?0:XP_PER_LEVEL;}
-function lvBonus(k){return (charLevel(k)-1)*0.2;}
+function lvBonus(k){return (charLevel(k)-1)*LV_BONUS_STEP;}
 // ── Rango (estrellas): independiente del nivel, sube con fichas+monedas (ver upgradeCharWithShards) ──
 function charRank(k){
   const c=CHARS[k];if(!c)return 1;
@@ -3491,6 +3514,11 @@ function makeCharIcon(k,mode){
     const rcol=RARITY_COLOR[c.rarity];
     inner+=`<div style="position:absolute;top:2px;left:2px;width:8px;height:8px;border-radius:50%;background:${rcol};box-shadow:0 0 4px ${rcol},0 0 1px #000;z-index:3;" title="${RARITY_LABEL[c.rarity]}"></div>`;
   }
+  // Insignia "NUEVO": el personaje acaba de alcanzar el nivel de desbloqueo de su 2do super
+  // y el jugador todavía no abrió su tarjeta para verlo (ver openCardPopup → sv.seenSuper2).
+  if(isUnlocked&&c.super2&&lv>=(c.super2Unlock||SUPER2_UNLOCK_LV)&&!(sv.seenSuper2&&sv.seenSuper2[k])){
+    inner+=`<div style="position:absolute;top:2px;right:2px;background:#cc44ff;color:#fff;font-size:4.5px;font-weight:bold;letter-spacing:.3px;padding:2px 3px;border-radius:4px;box-shadow:0 0 6px #cc44ffaa;z-index:4;animation:blockShieldPulse 1s ease-in-out infinite alternate;">NUEVO</div>`;
+  }
   if(!isUnlocked){
     const rarity=c.rarity||'common';const rcol=RARITY_COLOR[rarity];
     inner+=`<div class="iconLockBadge"><span>🔒</span><span style="font-size:5px;color:${rcol};margin-top:3px;letter-spacing:.3px;">${RARITY_LABEL[rarity]}</span></div>`;
@@ -3506,6 +3534,7 @@ function makeCharIcon(k,mode){
 function makeCharCard(k,mode){return makeCharIcon(k,mode);}
 
 function openCardPopup(k,mode){
+  _lastCardPopupMode=mode;
   const c=CHARS[k];const isUnlocked=sv.unlockedChars.includes(k);
   const lv=charLevel(k);const xp=charXp(k);const xpMax=xpToNext(k);
   // Card popup shows the dedicated icon (square)
@@ -3552,7 +3581,26 @@ function openCardPopup(k,mode){
     ${statBar2('💨 VEL',spdEff,10,'#00ff88')}
     ${lv>=3?statBar2('💜 RABIA',Math.min(5,2+Math.floor(lv/3)),10,'#cc44ff'):''}
   `;
-  $$('cpSuper').textContent='⚡ SUPER: '+c.super;$$('cpBuff').textContent=c.leaderBuff;
+  // Super 1 y (si existe y está desbloqueado por nivel) Super 2 — el jugador elige cuál usar en combate.
+  // El 2do super NO reemplaza al 1ro: sigue disponible, solo se activa según lo que el jugador seleccione aquí.
+  if(c.super2){
+    const unlockLv=c.super2Unlock||SUPER2_UNLOCK_LV;
+    const isUnlocked2=lv>=unlockLv;
+    if(isUnlocked2&&!(sv.seenSuper2&&sv.seenSuper2[k])){sv.seenSuper2=sv.seenSuper2||{};sv.seenSuper2[k]=true;saveSv();}
+    const chosen=(sv.selectedSuper&&sv.selectedSuper[k])===2&&isUnlocked2?2:1;
+    const mkSuperOpt=(n,name,locked)=>{
+      const active=chosen===n;
+      const col=active?'#cc44ff':'#555';
+      return `<div onclick="${locked?'':'selectSuperVariant(\''+k+'\','+n+')'}" style="flex:1;min-width:0;cursor:${locked?'default':'pointer'};border:2px solid ${col};border-radius:8px;padding:4px 5px;text-align:center;background:${active?'rgba(204,68,255,.12)':'transparent'};opacity:${locked?.45:1};">
+        <div style="font-size:5.5px;color:${active?'#cc44ff':'#889'};letter-spacing:.5px;">SUPER ${n}${active?' ✓':''}</div>
+        <div style="font-size:6.5px;color:${locked?'#667':'#eee'};margin-top:2px;">${locked?'🔒 LV '+unlockLv:name}</div>
+      </div>`;
+    };
+    $$('cpSuper').innerHTML=`<div style="display:flex;gap:6px;">${mkSuperOpt(1,c.super,false)}${mkSuperOpt(2,c.super2,!isUnlocked2)}</div>`;
+  }else{
+    $$('cpSuper').textContent='⚡ SUPER: '+c.super;
+  }
+  $$('cpBuff').textContent=c.leaderBuff;
   let btns='';
   if(!isUnlocked){
     if(c.rarity){
@@ -3608,6 +3656,14 @@ function openCardPopup(k,mode){
   $$('cpBtns').innerHTML=btns;$$('cardPopup').classList.add('on');
 }
 function closeCardPopup(){$$('cardPopup').classList.remove('on');}
+// Elige qué super (1 o 2) usará el personaje en combate. Solo aplica si el super 2 está
+// desbloqueado por nivel (ver super2Unlock/SUPER2_UNLOCK_LV); no se puede elegir un super bloqueado.
+function selectSuperVariant(k,n){
+  const c=CHARS[k];if(!c||!c.super2)return;
+  if(n===2&&charLevel(k)<(c.super2Unlock||SUPER2_UNLOCK_LV))return;
+  sv.selectedSuper=sv.selectedSuper||{};sv.selectedSuper[k]=n;
+  saveSv();openCardPopup(k,_lastCardPopupMode||'roster');
+}
 function setLeader(k){if(selectedChars.has(k)){leaderKey=k;buildCharSelect();buildLeaderBuff();}}
 function statBar2(icon,val,max,col){
   const pips=Array.from({length:max},(_,i)=>`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${i<val?col:'#222'};margin:0 1px;"></span>`).join('');
@@ -3754,6 +3810,12 @@ function buildRoster(){
   }
 }
 let selectedChars=new Set(['mordecai','rigby','skips']),leaderKey='mordecai';
+let _lastCardPopupMode='roster';
+// Los logs [BRANCH]/[MIRROR] son diagnóstico de la conexión host/guest (Versus por Sala/Online).
+// Estaban SIEMPRE activos y disparaban una advertencia confusa ("¡CAYÓ AL ELSE LOCAL!") incluso
+// en partidas 100% locales (Quick Match, Historia, etc.), donde caer al modo local es lo correcto.
+// Se apagan por defecto; activa window.DEBUG_NET=true en la consola solo si necesitas depurar red.
+window.DEBUG_NET=window.DEBUG_NET||false;
 function buildCharSelect(){
   buildTeamSlots();const container=$$('csCards');if(!container)return;
   container.innerHTML='';Object.entries(CHARS).forEach(([k])=>{
@@ -3950,7 +4012,13 @@ function _spawnTeamFighters(keys,side){
 // In-game characters are now rendered as SQUARES (w === h === 60)
 class Fighter{
   constructor(key,defObj,x,y,side,maxHpOverride,statBoost){
-    this.key=key;this.name=defObj.name;this.nameEs=defObj.nameEs||null;this.col=defObj.col;this.superName=defObj.super||'SUPER';this.superFn=defObj.superFn||null;
+    this.key=key;this.name=defObj.name;this.nameEs=defObj.nameEs||null;this.col=defObj.col;
+    // Super activo: si el personaje tiene 2do super desbloqueado (nivel alto) y el jugador lo eligió,
+    // se usa ese en vez del super 1. Solo aplica al equipo del jugador (side 'l'); los rivales/IA
+    // siempre usan su super definido normalmente.
+    const _useSuper2=side==='l'&&defObj.super2&&(sv.selectedSuper&&sv.selectedSuper[key]===2)&&charLevel(key)>=(defObj.super2Unlock||SUPER2_UNLOCK_LV);
+    this.superName=_useSuper2?defObj.super2:(defObj.super||'SUPER');
+    this.superFn=_useSuper2?(defObj.super2Fn||defObj.superFn||null):(defObj.superFn||null);
     this.isHolo=!!defObj.isHolo;
     this.x=x;this.y=y;
     // ── SQUARE dimensions ──
@@ -3977,6 +4045,7 @@ class Fighter{
     this.sprSuper=loadImg(sp.super||sp.throw||sp.idle||fb);
     this.img=this.sprIdle;this._throwTimer=0;this._shieldTimer=0;this._hurtTimer=0;this._superTimer=0;
     this._throwCooldown=0; // PASO 2: tiempo restante antes de poder lanzar de nuevo (modo tiempo real)
+    this._shieldBrokenTimer=0; // frames restantes mostrando el escudo destruido (armadura absorbió un golpe)
   }
   setTarget(){
     const margin=50;const lx=this.side==='l'?margin:W/2+10;const rx=this.side==='l'?W/2-70:W-margin-this.w;
@@ -3985,6 +4054,7 @@ class Fighter{
   update(){
     this.idle+=.045;if(this.hitFlash>0)this.hitFlash--;if(this._throwTimer>0)this._throwTimer--;
     if(this._shieldTimer>0)this._shieldTimer--;if(this._hurtTimer>0)this._hurtTimer--;if(this._superTimer>0)this._superTimer--;
+    if(this._shieldBrokenTimer>0)this._shieldBrokenTimer--;
     if(this._throwCooldown>0)this._throwCooldown--; // PASO 2: cooldown de lanzamiento en tiempo real
     if(this.recoilX!==0){this.x+=this.recoilX;this.recoilX*=.7;if(Math.abs(this.recoilX)<.2)this.recoilX=0;}
     if(this.squashT>0){this.squashT--;const t=this.squashT/8;this.scaleX=1+t*.3;this.scaleY=1-t*.25;}else{this.scaleX=1;this.scaleY=1;}
@@ -4043,7 +4113,7 @@ class Fighter{
     if(gravityShift.active&&this.jumping){this.jumpV+=gravityShift.dir*.15;}
   }
   takeDmg(d,ignoreArmor=false){
-    if(!this.alive)return;if(this.armor>0&&!ignoreArmor){this.armor--;spawnFloat('ARMADURA!',this.x+this.w/2,this.y-10,'#aaaaaa');return;}
+    if(!this.alive)return;if(this.armor>0&&!ignoreArmor){this.armor--;this._shieldBrokenTimer=26;spawnFloat('ARMADURA!',this.x+this.w/2,this.y-10,'#aaaaaa');return;}
     // Bonus de RANGO+NIVEL: reduce el daño recibido según el % de defensa del propio personaje (tope 50%)
     if(this.key&&CHARS[this.key]){const bonusKey=this._copiedKey||this.key;const defBonus=Math.min(.5,roleBonusParts(bonusKey).def);if(defBonus>0)d=Math.max(1,Math.round(d*(1-defBonus)));}
     const _prev=this.hp;this.hp=Math.max(0,this.hp-d);const _actual=_prev-this.hp;
@@ -4065,8 +4135,18 @@ class Fighter{
     if(this.scaleX!==1||this.scaleY!==1){const pivX=cx,pivY=dy+this.h;c.translate(pivX,pivY);c.scale(this.scaleX,this.scaleY);c.translate(-pivX,-pivY);}
     // Shadow ellipse
     c.save();c.globalAlpha=(this.alive?0.35:0.1)*c.globalAlpha||0.35;const sw=this.w*(.7+(this.jumpH/100)),sh=6-this.jumpH*.04;c.fillStyle='rgba(0,0,0,0.5)';c.beginPath();c.ellipse(cx,this.y+this.h+4,Math.max(8,sw/2),Math.max(3,sh),0,0,Math.PI*2);c.fill();c.restore();
-    // Armor ring
-    if(this.armor>0){c.save();c.strokeStyle='rgba(200,200,255,0.9)';c.lineWidth=3;c.shadowColor='#ffffff';c.shadowBlur=14;c.beginPath();c.arc(cx,dy+this.h/2,this.w*.65,0,Math.PI*2);c.stroke();c.restore();}
+    // Armor icon: imagen de escudo real sobre la cabeza (antes era solo un anillo)
+    if(this.armor>0||this._shieldBrokenTimer>0){
+      ensureShieldImgs();
+      const _armImg=this._shieldBrokenTimer>0?shieldBrokenImg:shieldImg;
+      if(_armImg&&_armImg.complete&&_armImg.naturalWidth>0){
+        c.save();
+        if(this._shieldBrokenTimer>0)c.globalAlpha=Math.min(1,this._shieldBrokenTimer/26);
+        const asz=28;c.shadowColor='#ffffff';c.shadowBlur=10;
+        c.drawImage(_armImg,cx-asz/2,dy-asz-4,asz,asz);
+        c.restore();
+      }
+    }
     // Sprite selection: priority = super > shield > throw > hurt > walk > idle
     let activeSpr=this.sprIdle;
     if(this._superTimer>0&&this.sprSuper)activeSpr=this.sprSuper;
@@ -4111,16 +4191,16 @@ class Fighter{
     const rbY=hbY+8;const rageVal=this.side==='l'?rageJ:rageE;c.fillStyle='rgba(0,0,0,0.6)';c.fillRect(dx,rbY,this.w,4);c.fillStyle='#cc44ff';c.fillRect(dx+1,rbY+1,Math.max(0,(this.w-2)*(rageVal/100)),2);c.strokeStyle='rgba(255,255,255,.12)';c.lineWidth=1;c.strokeRect(dx,rbY,this.w,4);
     // Jump glow
     if(this.jumping){c.save();c.shadowColor=this.col;c.shadowBlur=16;c.fillStyle=this.col+'88';c.beginPath();c.ellipse(cx,this.y+this.h+2,16,4,0,0,Math.PI*2);c.fill();c.restore();}
-    // Shield indicator
+    // Shield indicator (bloqueo activo): imagen real del escudo, sin círculo ni emoji
     if(this._shieldTimer>0){
+      ensureShieldImgs();
       const alpha=Math.min(1,this._shieldTimer/20);
-      c.save();c.globalAlpha=alpha;
-      c.font='16px serif';c.textAlign='center';c.textBaseline='middle';
-      c.fillText('🛡',cx,dy-12);
-      // Blue shield ring
-      c.strokeStyle='rgba(0,200,255,'+alpha+')';c.lineWidth=2.5;c.shadowColor='#00aaff';c.shadowBlur=10;
-      c.beginPath();c.arc(cx,dy+sprH/2,sprW*.6,0,Math.PI*2);c.stroke();
-      c.restore();
+      if(shieldImg&&shieldImg.complete&&shieldImg.naturalWidth>0){
+        c.save();c.globalAlpha=alpha;c.shadowColor='#00aaff';c.shadowBlur=14;
+        const bsz=30;const bY=(this.armor>0||this._shieldBrokenTimer>0)?dy-bsz-34:dy-bsz-6;
+        c.drawImage(shieldImg,cx-bsz/2,bY,bsz,bsz);
+        c.restore();
+      }
     }
     // Super indicator
     if(this._superTimer>0){
@@ -4244,7 +4324,7 @@ function startBattle(){
 
   // ── Bifurcación host/guest para modo sala ──────────────
   const _netRole_=myNetRole();
-  console.log('[BRANCH] startBattle bifurcación: _netRole_=',_netRole_,'sv.gameMode=',sv.gameMode,'sv._netVersus=',sv._netVersus,'sv._netRole=',sv._netRole,'_netChannel=',!!_netChannel,'_netChannel.open=',_netChannel&&_netChannel.open);
+  if(window.DEBUG_NET)console.log('[BRANCH] startBattle bifurcación: _netRole_=',_netRole_,'sv.gameMode=',sv.gameMode,'sv._netVersus=',sv._netVersus,'sv._netRole=',sv._netRole,'_netChannel=',!!_netChannel,'_netChannel.open=',_netChannel&&_netChannel.open);
   if(_netRole_==='host'){
     // Host: corre la lógica completa y transmite estado al guest
     gameLoop();
@@ -4256,7 +4336,7 @@ function startBattle(){
     active=true;
     _guestGameLoop();
   } else {
-    console.warn('[BRANCH] ¡CAYÓ AL ELSE LOCAL! Esto NO debería pasar en una partida de red.');
+    if(isNetMode)console.warn('[BRANCH] ¡CAYÓ AL ELSE LOCAL en una partida de red! _netRole_ no se resolvió a host/guest.');
     gameLoop();
   }
 }
@@ -4976,7 +5056,11 @@ cv.addEventListener('touchstart',onPointerDown,{passive:false});cv.addEventListe
 
 function doSuper(){if(rageJ<100||ball.inFlight)return;const hero=activeJ();if(!hero||(hero._throwCooldown||0)>0)return;rageJ=0;updHUD();updRageBtn();hero._superTimer=45;msg('¡SUPER DE '+(hero.nameEs&&_lang==="es"?hero.nameEs:hero.name).toUpperCase()+'!');shakeF=18;shakeA=9;const fn=hero.superFn;if(fn&&window[fn])window[fn](hero);else{const ve=teamE.filter(j=>j.alive);if(ve.length){ve[0].takeDmg(3);spawnFloat('SUPER!',ve[0].x,ve[0].y-20,'#cc44ff');}}if(hero.superFn){const sn=hero.superFn.replace('super','').replace('eSuper','');if(!chalSession.uniqueSupers.has(sn)){chalSession.uniqueSupers.add(sn);chalSession.supersUsed.push(sn);}}updHUD();checkWin();}
 window.superMordecai=function(h){const ve=teamE.filter(j=>j.alive);explosion(W/2,H/2);spawnFloat('MORDO BLAST!',W/2,80,'#00d4ff');ve.forEach(e=>{e.takeDmg(2);spark(e.x+e.w/2,e.y,e.col,8);});if(leaderBuffActive.key==='mordecai')ve.forEach(e=>e.takeDmg(1));};
+// SUPER 2 (desbloqueado en nivel alto): golpe finisher al rival con menos HP + carga rabia extra
+window.superMordecai2=function(h){const ve=teamE.filter(j=>j.alive);if(!ve.length)return;const tgt=ve.reduce((a,b)=>a.hp<b.hp?a:b);spawnFloat('SKY STRIKE!',tgt.x+tgt.w/2,tgt.y-20,'#00eaff');tgt.takeDmg(3,true);spark(tgt.x+tgt.w/2,tgt.y+tgt.h/2,'#00eaff',10);addRage('j',10);};
 window.superRigby=function(h){const ve=teamE.filter(j=>j.alive);if(!ve.length)return;const tgt=ve[Math.floor(Math.random()*ve.length)];spawnFloat('TECH KWON DO!',h.x+h.w/2,h.y-20,'#88cc44');setTimeout(()=>{tgt.takeDmg(4,true);spark(tgt.x+tgt.w/2,tgt.y+tgt.h/2,tgt.col,12);updHUD();checkWin();},300);};
+// SUPER 2: golpea a 2 rivales al azar ignorando armadura, con menos daño individual que el super 1
+window.superRigby2=function(h){const ve=teamE.filter(j=>j.alive);if(!ve.length)return;const picks=[...ve].sort(()=>Math.random()-.5).slice(0,2);spawnFloat('DOBLE KWON DO!',h.x+h.w/2,h.y-20,'#88cc44');picks.forEach((t,i)=>setTimeout(()=>{if(t.alive){t.takeDmg(2,true);spark(t.x+t.w/2,t.y+t.h/2,t.col,8);updHUD();checkWin();}},250+i*220));};
 // DOUG — copia al Rigby del equipo RIVAL (stats/rango/super) solo al activar su super.
 // Prioriza 'rigby' exacto; si no está, cualquier variante (baseChar:'rigby'); si no hay
 // ningún Rigby en el rival, copia a un rival aleatorio cualquiera.
@@ -5042,7 +5126,11 @@ function _openCloneCopyModal(h){
   modal.style.display='flex';
 }
 window.superSkips=function(h){skipsShield=true;teamJ.filter(j=>j.alive).forEach(j=>j.armor=2);spawnFloat('BARRERA BIÓNICA!',h.x+h.w/2,h.y-20,'#bb88ff');spawnFloat('EQUIPO PROTEGIDO',W/2,100,'#aaaaaa');};
+// SUPER 2: protección más ligera (1 de armadura) pero además reduce la rabia del rival
+window.superSkips2=function(h){teamJ.filter(j=>j.alive).forEach(j=>j.armor=(j.armor||0)+1);rageE=Math.max(0,rageE-20);updHUD();spawnFloat('SABIDURÍA ANCIANA!',W/2,H/2,'#eeddaa');spawnFloat('-20 RABIA RIVAL',W-150,80,'#eeddaa');};
 window.superBenson=function(h){rageJ=100;updRageBtn();const ve=teamE.filter(j=>j.alive);if(ve.length){const t=ve[Math.floor(Math.random()*ve.length)];t.takeDmg(2);}spawnFloat('RAGE BURST!',W/2,H/2,'#ff6644');};
+// SUPER 2: daño leve a todo el equipo rival + cura al propio equipo (más de soporte que el super 1)
+window.superBenson2=function(h){const ve=teamE.filter(j=>j.alive);ve.forEach(e=>e.takeDmg(1));const amt=_healAmount(h);teamJ.filter(j=>j.alive).forEach(j=>j.heal(amt));spawnFloat('SOBRECARGA DE PAPELEO!',W/2,H/2,'#cc4422');};
 function _healAmount(caster){
   if(!caster||!caster.key||!CHARS[caster.key])return leaderBuffActive.key==='eileen'?2:1;
   const healBonus=roleBonusParts(caster.key).heal;
@@ -5050,7 +5138,11 @@ function _healAmount(caster){
   return leaderBuffActive.key==='eileen'?base+1:base;
 }
 window.superPops=function(h){const amt=_healAmount(h);teamJ.filter(j=>j.alive).forEach(j=>j.heal(amt));rageJ=Math.min(100,rageJ+15);updRageBtn();spawnFloat('JOLLY GOOD!',W/2,H/2,'#ffcc00');spawnFloat('+15 RABIA!',W/2,140,'#ffcc00');};
+// SUPER 2: golpe caballeroso ignorando armadura al rival más fuerte + curación al equipo
+window.superPops2=function(h){const ve=teamE.filter(j=>j.alive);if(ve.length){const tgt=ve.reduce((a,b)=>a.hp>b.hp?a:b);tgt.takeDmg(2,true);spawnFloat('¡BUENOS DÍAS!',tgt.x+tgt.w/2,tgt.y-20,'#ffcc44');}const amt=_healAmount(h);teamJ.filter(j=>j.alive).forEach(j=>j.heal(amt));};
 window.superMuscle=function(h){const ve=teamE.filter(j=>j.alive);if(!ve.length)return;const tgt=ve.reduce((a,b)=>a.hp>b.hp?a:b);tgt.takeDmg(3);spawnFloat('MY MOM!!',h.x+h.w/2,h.y-25,'#44bb44');spark(W/2,H/2,'#44bb44',20);};
+// SUPER 2: envenena a TODO el equipo rival de una vez (daño en el tiempo, en vez de un golpe único)
+window.superMuscle2=function(h){const ve=teamE.filter(j=>j.alive);if(!ve.length)return;ve.forEach(e=>e.poisoned=3);spawnFloat('¡QUÉ ASCO!',W/2,H/2,'#66aa22');spark(W/2,H/2,'#66aa22',16);};
 window.superHifive=function(h){const ve=teamE.filter(j=>j.alive);if(ve.length){const t=ve[Math.floor(Math.random()*ve.length)];t.frozen=2;spawnFloat('GHOST PASS!',t.x,t.y-20,'#aabbdd');}};
 window.superEileen=function(h){const amt=_healAmount(h);teamJ.filter(j=>j.alive).forEach(j=>{j.heal(amt);if(j._throwCooldown>0)j._throwCooldown=Math.floor(j._throwCooldown*0.4);});spawnFloat('CRUSH STUDY!',W/2,H/2,'#ff8899');spawnFloat('¡RECARGA RÁPIDA!',W/2,140,'#ff8899');};
 window.superMargaret=function(h){const ve=teamE.filter(j=>j.alive);if(ve.length){throwBall(h,ve[0],false,true,4);}spawnFloat('WING STRIKE!',h.x,h.y-20,'#ff5566');};
@@ -6412,7 +6504,7 @@ function _applyGameState(s){
 
 // ── Iniciar broadcast del host ────────────────────────────
 function _startHostBroadcast(){
-  console.log('[BRANCH] _startHostBroadcast() llamada. _netChannel=',!!_netChannel,'_onlineChannel=',!!_onlineChannel,'_netChannel.open=',_netChannel&&_netChannel.open,'_onlineChannel.open=',_onlineChannel&&_onlineChannel.open);
+  if(window.DEBUG_NET)console.log('[BRANCH] _startHostBroadcast() llamada. _netChannel=',!!_netChannel,'_onlineChannel=',!!_onlineChannel,'_netChannel.open=',_netChannel&&_netChannel.open,'_onlineChannel.open=',_onlineChannel&&_onlineChannel.open);
   if(_hostBroadcastTimer)clearInterval(_hostBroadcastTimer);
   if(!window._stateBroadcastLogged){window._stateBroadcastLogged=0;}
   _hostBroadcastTimer=setInterval(()=>{
@@ -7381,7 +7473,7 @@ function drawScene(){
   // volteamos el LIENZO al dibujar, para que el guest vea su propio
   // equipo (teamE) a la izquierda, igual que J1 lo ve siempre.
   const _mirrorView=(myNetRole()==='guest');
-  if(!window._mirrorLogged){window._mirrorLogged=true;console.log('[MIRROR] myNetRole()=',myNetRole(),'isVersus=',isVersus(),'sv._netVersus=',sv._netVersus,'sv._netRole=',sv._netRole,'isOnlineReal=',isOnlineReal());}
+  if(!window._mirrorLogged&&window.DEBUG_NET){window._mirrorLogged=true;console.log('[MIRROR] myNetRole()=',myNetRole(),'isVersus=',isVersus(),'sv._netVersus=',sv._netVersus,'sv._netRole=',sv._netRole,'isOnlineReal=',isOnlineReal());}
   if(_mirrorView){
     ctx.translate(W,0);ctx.scale(-1,1);
     // Contrarrestar el espejo SOLO para texto, para que no salga al revés.
